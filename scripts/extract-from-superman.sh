@@ -113,13 +113,15 @@ echo "==> 应用独立版差异 patch（scripts/patches/）"
 # 应用仓库的 src/plugin 是上游原样拷贝；独立版的差异（hotboard tick、调度默认开、
 # 去 Python TrendRadar 定时器）以 patch 形式重放。已打过（含标记）自动跳过。
 apply_patch() {
-  local patch="$1" marker="$2" target="$3"
+  # 注意：局部变量不能叫 patch（会遮蔽 /usr/bin/patch，bash 3.2 + set -u 下间歇性
+  # 报 unbound variable 导致整个提取中止、独立版差异丢失），统一用 patch_file。
+  local patch_file="$1" marker="$2" target="$3"
   if grep -q "$marker" "$HERE/$target" 2>/dev/null; then
-    echo "    [跳过] $patch（已应用）"
-  elif patch -p1 --forward -d "$HERE" < "$HERE/scripts/patches/$patch"; then
-    echo "    [应用] $patch"
+    echo "    [跳过] $patch_file（已应用）"
+  elif /usr/bin/patch -p1 --forward -d "$HERE" < "$HERE/scripts/patches/$patch_file"; then
+    echo "    [应用] $patch_file"
   else
-    echo "    [失败] $patch —— 上游文件变化导致补丁冲突，需人工合并后重新生成"; exit 1
+    echo "    [失败] $patch_file —— 上游文件变化导致补丁冲突，需人工合并后重新生成"; exit 1
   fi
 }
 apply_patch standalone-scheduler.patch 'hotboard.sync' src/plugin/host/jobs/scheduler.ts
