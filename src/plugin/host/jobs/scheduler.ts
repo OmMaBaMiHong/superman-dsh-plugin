@@ -150,14 +150,25 @@ export function startPluginScheduler(
     timers.push(timer)
   }
 
-  // 独立版热点同步：内置渠道热榜采集（src/hotboard）直接 upsert 进 trend_radar_items，
-  // 取代应用版的 runTrendRadarSync（读 TrendRadar Python 产出的 SQLite，独立形态不存在）。
+  // 独立版热点同步（订阅制）：只采集用户勾选的平台（user_source_prefs source='hot'，
+  // 跨活跃用户取并集；一个都没勾 = 不采集，面板同样不展示）。未勾选时本轮直接跳过。
   every('hotboard.sync', config.trendradarIntervalMs ?? TRENDRADAR_INTERVAL, async () => {
     const { runHotboardSync } = await import('../../../hotboard/run.js')
-    const summary = await runHotboardSync({ db: pool })
+    const { rows: prefRows } = await pool.query(
+      `SELECT DISTINCT p.pref_key
+         FROM user_source_prefs p
+         JOIN users u ON u.id::text = p.user_id
+        WHERE p.source_key = 'hot' AND u.status = 'active'`,
+    )
+    const platforms = prefRows.map((row) => String(row.pref_key)).filter((key) => key !== '')
+    if (platforms.length === 0) {
+      logger.log('hotboard.sync: 未勾选平台，本轮跳过采集')
+      return
+    }
+    const summary = await runHotboardSync({ db: pool, platforms })
     const failed = summary.failedChannels.map((c) => `${c.id}: ${c.error}`).join('; ')
     logger.log(
-      `hotboard.sync: upserted=${summary.upserted} ok=[${summary.okChannels.join(', ')}]` +
+      `hotboard.sync: platforms=[${platforms.join(',')}] upserted=${summary.upserted} ok=[${summary.okChannels.join(', ')}]` +
         (failed ? ` failed={${failed}}` : ''),
     )
   })

@@ -51,8 +51,13 @@ async function fetchChannel(channel: HotboardChannel): Promise<HotboardRawItem[]
 
 export async function collectHotboard(
   env: NodeJS.ProcessEnv = process.env,
+  opts?: { platforms?: string[] },
 ): Promise<CollectorResult> {
-  const channels = resolveChannels(env);
+  // 订阅制：用户勾选的平台白名单（空数组 = 未勾选任何平台 → 不采集）
+  const allowed = opts?.platforms;
+  const channels = resolveChannels(env).filter(
+    (channel) => !allowed || allowed.length === 0 || allowed.includes(channel.id),
+  );
   const settled = await Promise.allSettled(
     channels.map(async (channel) => ({ channel, items: await fetchChannel(channel) })),
   );

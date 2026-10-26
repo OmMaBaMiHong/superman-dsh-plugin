@@ -20,6 +20,8 @@ export interface HotboardSyncOptions {
   db: Queryable;
   userId?: string;
   env?: NodeJS.ProcessEnv;
+  /** 订阅制：只采集勾选的平台 key（空数组 = 未勾选 → 不采集） */
+  platforms?: string[];
 }
 
 export interface HotboardSyncSummary {
@@ -29,7 +31,7 @@ export interface HotboardSyncSummary {
 }
 
 export async function runHotboardSync(options: HotboardSyncOptions): Promise<HotboardSyncSummary> {
-  const result = await collectHotboard(options.env);
+  const result = await collectHotboard(options.env, { platforms: options.platforms });
   // repository 的 DbClient 是 pg 具体类型，但实现只依赖 db.query；
   // PGlite 适配层 query 形状一致，此处收窄断言以保持 core 零改动。
   const db = options.db as unknown as Parameters<typeof upsertTrendRadarItems>[0];
