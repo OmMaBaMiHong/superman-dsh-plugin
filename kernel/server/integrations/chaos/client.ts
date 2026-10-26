@@ -468,6 +468,8 @@ export interface ChaosGithubRepo {
   /** 中文描述（LLM 异步回填，未就绪为 null，前端回退英文原文） */
   descriptionZh: string | null;
   topics: string[];
+  /** 中台标签全量（含 gh-xxx / gh-xxx--子类 多级），订阅过滤与级联分类都用它 */
+  tags: string[];
   category: string;
   categoryName: string;
   url: string | null;
@@ -555,6 +557,7 @@ export function governGithubMaterials(payload: unknown, minStars: number): Chaos
     const { category, categoryName } = classifyGithubRepo(tags, typeof gh.categorySlug === 'string' ? gh.categorySlug : null);
     const repo: ChaosGithubRepo = {
       id: typeof r.id === 'string' ? r.id : title,
+      tags,
       repo: title,
       description: typeof r.summary === 'string' && r.summary.trim() ? r.summary.trim() : null,
       descriptionZh: null,
@@ -594,12 +597,14 @@ export function governGithubMaterials(payload: unknown, minStars: number): Chaos
  */
 export async function readChaosGithubRepos(
   db: Queryable | null,
-  options: { minStars?: number } = {},
+  options: { minStars?: number; tags?: string[] } = {},
 ): Promise<ChaosResult<ChaosGithubRepo[]>> {
   const minStars = Math.max(0, Math.floor(options.minStars ?? GITHUB_DEFAULT_MIN_STARS));
   const config = await readPlatformConfig(db ?? null);
   if (!config) return { data: null, status: 'unconfigured' };
-  const jobs: Array<string | null> = [null, ...Object.keys(GITHUB_CATEGORY_NAMES)];
+  // 订阅制：传了 tags 就只按勾选的标签拉取；未传 = 全量（管理侧用）
+  const jobs: Array<string | null> =
+    options.tags && options.tags.length > 0 ? [...options.tags] : [null, ...Object.keys(GITHUB_CATEGORY_NAMES)];
   const payloads: unknown[] = [];
   let failures = 0;
   const fetchOnce = async (tag: string | null): Promise<void> => {
