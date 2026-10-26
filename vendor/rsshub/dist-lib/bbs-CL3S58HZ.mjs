@@ -1,0 +1,90 @@
+import { t as parseDate } from "./parse-date-Cr0wQjV_.mjs";
+import { t as cache_default } from "./cache-CNhdNI4T.mjs";
+import { t as got_default } from "./got-Dnzt41dd.mjs";
+import { t as timezone } from "./timezone-BBvDwS_3.mjs";
+import { Fragment, jsx, jsxs } from "hono/jsx/jsx-runtime";
+import { load } from "cheerio";
+import { renderToString } from "hono/jsx/dom/server";
+//#region lib/routes/hupu/bbs.tsx
+const route = {
+	path: ["/bbs/:id?/:order?", "/bxj/:id?/:order?"],
+	categories: ["bbs"],
+	example: "/hupu/bbs/topic-daily",
+	parameters: {
+		id: "编号，可在对应社区 URL 中找到，默认为#步行街主干道",
+		order: "排序方式，可选 `0` 即 最新回复 或 `1` 即 最新发布，默认为最新回复"
+	},
+	features: {
+		requireConfig: false,
+		requirePuppeteer: false,
+		antiCrawler: false,
+		supportBT: false,
+		supportPodcast: false,
+		supportScihub: false
+	},
+	radar: [{
+		source: ["m.hupu.com/:category", "m.hupu.com/"],
+		target: "/:category"
+	}],
+	name: "社区",
+	maintainers: ["LogicJake", "nczitzk"],
+	handler,
+	description: `::: tip
+更多社区参见 [社区](https://bbs.hupu.com)
+:::`
+};
+async function handler(ctx) {
+	const id = ctx.req.param("id") ?? "34";
+	const order = ctx.req.param("order") ?? "1";
+	const rootUrl = "https://bbs.hupu.com";
+	const apiRootUrl = "https://games.mobileapi.hupu.com";
+	const currentUrl = `${rootUrl}/${id}${order === "1" ? "-postdate" : ""}`;
+	const $ = load((await got_default({
+		method: "get",
+		url: currentUrl
+	})).data);
+	$(".page-icon").remove();
+	let items = $(".bbs-sl-web-post-layout .post-title a").toArray().map((item) => {
+		item = $(item);
+		return {
+			title: item.text(),
+			link: `${rootUrl}${item.attr("href")}`,
+			pubDate: timezone(parseDate(item.parent().parent().find(".post-time").text(), "MM-DD HH:mm"), 8)
+		};
+	});
+	items = await Promise.all(items.map((item) => cache_default.tryGet(item.link, async () => {
+		try {
+			let detailResponse = await got_default({
+				method: "get",
+				url: item.link
+			});
+			const content = load(detailResponse.data);
+			content(".seo-dom").remove();
+			item.author = content(".post-user-comp-info-top-name").first().text();
+			item.description = content(".main-thread").first().html();
+			const matches = detailResponse.data.match(/matchId=(\d+)-BATTLE_REPORT/);
+			if (matches) {
+				detailResponse = await got_default({
+					method: "get",
+					url: `${apiRootUrl}/1/7.5.36/basketballapi/news/battleReport?relationId=${matches[1]}&relationType=BATTLE_REPORT`
+				});
+				const result = detailResponse.data.result;
+				item.description = renderToString(/* @__PURE__ */ jsxs(Fragment, { children: [
+					result.img ? /* @__PURE__ */ jsx("img", { src: result.img }) : null,
+					result.beginContent ? /* @__PURE__ */ jsx("p", { children: result.beginContent }) : null,
+					result.keyEvent?.length ? /* @__PURE__ */ jsxs(Fragment, { children: [/* @__PURE__ */ jsx("h1", { children: "关键事件" }), result.keyEvent.map((event) => /* @__PURE__ */ jsxs(Fragment, { children: [/* @__PURE__ */ jsx("p", { children: event.title }), event.gifImgs?.map((gif) => /* @__PURE__ */ jsx("img", { src: gif }))] }))] }) : null,
+					result.playerScoreImg ? /* @__PURE__ */ jsxs(Fragment, { children: [/* @__PURE__ */ jsx("h1", { children: "球员评分" }), /* @__PURE__ */ jsx("img", { src: result.playerScoreImg })] }) : null
+				] }));
+			}
+		} catch {}
+		return item;
+	})));
+	return {
+		title: `虎扑社区 - ${$(".bbs-sl-web-intro-detail-title").text()}`,
+		link: currentUrl,
+		item: items,
+		description: $(".bbs-sl-web-intro-detail-desc-text").first().text()
+	};
+}
+//#endregion
+export { route };

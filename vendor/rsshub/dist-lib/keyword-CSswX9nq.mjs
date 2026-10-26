@@ -1,0 +1,50 @@
+import "./types-DNj6Etbg.mjs";
+import { t as parseDate } from "./parse-date-Cr0wQjV_.mjs";
+import { t as got_default } from "./got-Dnzt41dd.mjs";
+import { t as parseItem } from "./utils-c_5W0_zD.mjs";
+//#region lib/routes/gelonghui/keyword.ts
+const route = {
+	path: "/keyword/:keyword",
+	categories: ["finance"],
+	view: 0,
+	example: "/gelonghui/keyword/早报",
+	parameters: { keyword: "搜索关键字" },
+	features: {
+		requireConfig: false,
+		requirePuppeteer: false,
+		antiCrawler: false,
+		supportBT: false,
+		supportPodcast: false,
+		supportScihub: false
+	},
+	name: "搜索关键字",
+	maintainers: ["nczitzk"],
+	handler
+};
+async function handler(ctx) {
+	const keyword = ctx.req.param("keyword");
+	const currentUrl = "https://www.gelonghui.com/api/post/search/v4";
+	const { data } = await got_default(currentUrl, { searchParams: {
+		keyword,
+		isVipArticle: false,
+		count: ctx.req.query("limit") ? Number(ctx.req.query("limit")) : 20,
+		page: 1,
+		searchArea: "all"
+	} });
+	const list = data.result.map((item) => ({
+		title: item.title,
+		description: item.summary,
+		link: item.link,
+		author: item.source,
+		pubDate: parseDate(item.timestamp, "X")
+	}));
+	const items = await Promise.all(list.map((item) => parseItem(item)));
+	return {
+		title: `格隆汇 - 关键词 “${keyword}” 的文章`,
+		link: currentUrl,
+		item: items,
+		description: `找到关于 “ ${keyword} ”的文章，共${data.totalCount}个结果`
+	};
+}
+//#endregion
+export { route };

@@ -1,0 +1,124 @@
+import { t as rofetch } from "./ofetch-DleGqjHs.mjs";
+import { t as parseDate } from "./parse-date-Cr0wQjV_.mjs";
+import { t as cache_default } from "./cache-CNhdNI4T.mjs";
+import { t as ProcessItem } from "./utils-Dt_2r2mm.mjs";
+import { load } from "cheerio";
+//#region lib/routes/cnki/author.ts
+const route = {
+	name: "作者",
+	maintainers: ["Derekmini", "harveyqiu"],
+	categories: ["journal"],
+	path: "/author/:name/:company",
+	parameters: {
+		name: "作者姓名",
+		company: "作者单位"
+	},
+	features: {
+		requireConfig: false,
+		requirePuppeteer: false,
+		antiCrawler: false,
+		supportBT: false,
+		supportPodcast: false,
+		supportScihub: false
+	},
+	example: "/cnki/author/丁晓东/中国人民大学",
+	description: `::: tip
+可能仅限中国大陆服务器访问，以实际情况为准。
+:::`,
+	handler
+};
+async function handler(ctx) {
+	const name = ctx.req.param("name");
+	const company = ctx.req.param("company");
+	const host = "https://kns.cnki.net";
+	const link = `${host}/kns8s/AdvSearch?classid=WD0FTY92`;
+	const params = new URLSearchParams();
+	params.append("boolSearch", "true");
+	params.append("QueryJson", JSON.stringify({
+		Platform: "",
+		Resource: "CROSSDB",
+		Classid: "WD0FTY92",
+		Products: "",
+		QNode: { QGroup: [{
+			Key: "Subject",
+			Title: "",
+			Logic: 0,
+			Items: [],
+			ChildItems: [{
+				Key: "input[data-tipid=gradetxt-1]",
+				Title: "作者",
+				Logic: 0,
+				Items: [{
+					Key: "input[data-tipid=gradetxt-1]",
+					Title: "作者",
+					Logic: 0,
+					Field: "AU",
+					Operator: "DEFAULT",
+					Value: name,
+					Value2: ""
+				}],
+				ChildItems: []
+			}, {
+				Key: "input[data-tipid=gradetxt-2]",
+				Title: "作者单位",
+				Logic: 0,
+				Items: [{
+					Key: "input[data-tipid=gradetxt-2]",
+					Title: "作者单位",
+					Logic: 0,
+					Field: "AF",
+					Operator: "FUZZY",
+					Value: company,
+					Value2: ""
+				}],
+				ChildItems: []
+			}]
+		}, {
+			Key: "ControlGroup",
+			Title: "",
+			Logic: 0,
+			Items: [],
+			ChildItems: []
+		}] },
+		ExScope: "0",
+		SearchType: 3,
+		Rlang: "CHINESE",
+		KuaKuCode: "YSTT4HG0,LSTPFY1C,JUP3MUPD,MPMFIG1A,EMRPGLPA,WQ0UVIAA,BLZOG7CK,PWFIRAGL,NN3FJMUV,NLBO1Z6R"
+	}));
+	params.append("pageNum", "1");
+	params.append("pageSize", "20");
+	params.append("sortField", "PT");
+	params.append("sortType", "desc");
+	params.append("dstyle", "listmode");
+	params.append("productStr", "YSTT4HG0,LSTPFY1C,RMJLXHZ3,JQIRZIYA,JUP3MUPD,1UR4K4HZ,BPBAFJ5S,R79MZMCB,MPMFIG1A,EMRPGLPA,J708GVCE,ML4DRIDX,WQ0UVIAA,NB3BWEHK,XVLO76FD,HR1YT1Z9,BLZOG7CK,PWFIRAGL,NN3FJMUV,NLBO1Z6R,");
+	params.append("aside", `（作者：${name}(精确)）AND（作者单位：${company}(模糊)）`);
+	params.append("searchFrom", "资源范围：总库;  时间范围：更新时间：不限;");
+	params.append("CurPage", "1");
+	const $ = load(await rofetch(`${host}/kns8s/brief/grid`, {
+		method: "POST",
+		headers: {
+			"content-type": "application/x-www-form-urlencoded;charset=utf-8",
+			referer: `${host}/kns8s/AdvSearch?classid=WD0FTY92`
+		},
+		body: params.toString()
+	}));
+	const list = $("tr").toArray().slice(1).map((item) => {
+		return {
+			title: $(item).find("a.fz14").text(),
+			link: `https://cnki.net/kcms/detail/detail.aspx?filename=${$(item).find("a.icon-collect").attr("data-filename")}&dbcode=CJFD`,
+			pubDate: parseDate($(item).find("td.date").text(), "YYYY-MM-DD")
+		};
+	});
+	const processedItems = (await Promise.all(list.map((item) => cache_default.tryGet(item.link, () => ProcessItem(item))))).filter((item) => item !== null && typeof item === "object").map((item) => ({
+		title: item.title || "",
+		link: item.link,
+		pubDate: item.pubDate
+	}));
+	return {
+		title: `知网 ${name} ${company}`,
+		link,
+		item: processedItems
+	};
+}
+//#endregion
+export { route };

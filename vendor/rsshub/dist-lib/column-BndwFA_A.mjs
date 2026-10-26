@@ -1,0 +1,61 @@
+import { t as parseDate } from "./parse-date-Cr0wQjV_.mjs";
+import { t as got_default } from "./got-Dnzt41dd.mjs";
+import { Fragment, jsx, jsxs } from "hono/jsx/jsx-runtime";
+import { renderToString } from "hono/jsx/dom/server";
+//#region lib/routes/cntv/column.tsx
+const route = {
+	path: "/:column",
+	categories: ["multimedia"],
+	example: "/cntv/TOPC1451528971114112",
+	parameters: { column: "栏目ID, 可在对应CNTV栏目页面找到" },
+	features: {
+		requireConfig: false,
+		requirePuppeteer: false,
+		antiCrawler: false,
+		supportBT: false,
+		supportPodcast: false,
+		supportScihub: false
+	},
+	radar: [{ source: ["navi.cctv.com/"] }],
+	name: "栏目",
+	maintainers: ["WhoIsSure", "Fatpandac"],
+	handler,
+	url: "navi.cctv.com/",
+	description: `::: tip
+栏目 ID 查找示例:
+打开栏目具体某一期页面，F12 控制台输入\`column_id\`得到栏目 ID。
+:::
+
+栏目
+
+| 新闻联播             | 新闻周刊             | 天下足球             |
+| -------------------- | -------------------- | -------------------- |
+| TOPC1451528971114112 | TOPC1451559180488841 | TOPC1451551777876756 |`
+};
+async function handler(ctx) {
+	const data = (await got_default({
+		method: "get",
+		url: `https://api.cntv.cn/NewVideo/getVideoListByColumn?id=${ctx.req.param("column")}&n=${Number.isNaN(Number.parseInt(ctx.req.query("limit"))) ? 25 : Number.parseInt(ctx.req.query("limit"))}&sort=desc&p=1&mode=0&serviceId=tvcctv`
+	})).data.data.list;
+	const name = data[0].title.match(/《(.*?)》/)[1];
+	return {
+		title: `CNTV 栏目 - ${name}`,
+		description: `${name} 栏目的视频更新`,
+		item: data.map((item) => ({
+			title: item.title,
+			description: renderToString(/* @__PURE__ */ jsxs(Fragment, { children: [
+				/* @__PURE__ */ jsx("p", { children: item.brief }),
+				/* @__PURE__ */ jsxs("p", { children: ["时长：", item.length] }),
+				/* @__PURE__ */ jsx("p", { children: /* @__PURE__ */ jsx("img", { src: item.image }) }),
+				/* @__PURE__ */ jsx("p", { children: /* @__PURE__ */ jsx("a", {
+					href: item.url,
+					children: "在线观看"
+				}) })
+			] })),
+			pubDate: parseDate(item.time),
+			link: item.url
+		}))
+	};
+}
+//#endregion
+export { route };

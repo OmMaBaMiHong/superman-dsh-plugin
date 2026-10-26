@@ -1,0 +1,83 @@
+import { t as parseDate } from "./parse-date-Cr0wQjV_.mjs";
+import { t as got_default } from "./got-Dnzt41dd.mjs";
+import { t as generateData } from "./utils-sxH0nGKt2.mjs";
+import { t as auth_default } from "./auth-B7uiPlNs.mjs";
+//#region lib/routes/zhihu/xhu/collection.ts
+const route = {
+	path: "/xhu/collection/:id",
+	categories: ["social-media"],
+	example: "/zhihu/xhu/collection/26444956",
+	parameters: { id: "收藏夹 id, 可在收藏夹页面 URL 中找到" },
+	features: {
+		requireConfig: false,
+		requirePuppeteer: false,
+		antiCrawler: false,
+		supportBT: false,
+		supportPodcast: false,
+		supportScihub: false
+	},
+	radar: [{ source: ["www.zhihu.com/collection/:id"] }],
+	name: "xhu - 收藏夹",
+	maintainers: ["JimenezLi"],
+	handler
+};
+async function handler(ctx) {
+	const xhuCookie = await auth_default.getCookie();
+	const id = ctx.req.param("id");
+	const link = `https://www.zhihu.com/collection/${id}`;
+	const titleResponse = await got_default({
+		method: "get",
+		url: `https://api.zhihuvvv.workers.dev/collections/${id}`,
+		headers: {
+			Referer: "https://api.zhihuvvv.workers.dev",
+			Cookie: xhuCookie
+		}
+	});
+	const listRes = (await got_default({
+		method: "get",
+		url: `https://api.zhihuvvv.workers.dev/collections/${id}/contents?limit=20&offset=0`,
+		headers: {
+			Referer: "https://api.zhihuvvv.workers.dev",
+			Cookie: xhuCookie
+		}
+	})).data.data;
+	return {
+		title: `知乎收藏夹-${titleResponse.data.title}`,
+		description: titleResponse.data.description,
+		link,
+		item: listRes.map((item) => {
+			const link = item.url;
+			const author = item.author.name;
+			const pubDate = parseDate(item.collect_time * 1e3);
+			let title;
+			let description;
+			switch (item.type) {
+				case "article":
+					title = item.title;
+					description = item.excerpt;
+					break;
+				case "answer":
+					title = item.question.title;
+					description = item.excerpt;
+					break;
+				case "pin": {
+					const pinItem = generateData([item])[0];
+					title = pinItem.title;
+					description = pinItem.description;
+					break;
+				}
+				default: throw new Error(`Unknown type: ${item.type}`);
+			}
+			return {
+				title: `收藏了内容：${title}`,
+				description,
+				author,
+				pubDate,
+				guid: link,
+				link
+			};
+		})
+	};
+}
+//#endregion
+export { route };

@@ -1,0 +1,587 @@
+import { t as rofetch } from "./ofetch-DleGqjHs.mjs";
+import { t as parseDate } from "./parse-date-Cr0wQjV_.mjs";
+import { t as cache_default } from "./cache-CNhdNI4T.mjs";
+import { t as got_default } from "./got-Dnzt41dd.mjs";
+import { Fragment, jsx, jsxs } from "hono/jsx/jsx-runtime";
+import { load } from "cheerio";
+import { renderToString } from "hono/jsx/dom/server";
+import { destr } from "destr";
+import { raw } from "hono/html";
+//#region lib/routes/bloomberg/templates/audio-media.tsx
+const renderAudioMedia = ({ img, src, caption, credit }) => renderToString(/* @__PURE__ */ jsxs("figure", { children: [/* @__PURE__ */ jsxs("div", { children: [/* @__PURE__ */ jsx("img", { src: img }), /* @__PURE__ */ jsxs("audio", {
+	controls: true,
+	children: [/* @__PURE__ */ jsx("source", {
+		src,
+		type: "audio/mpeg"
+	}), "Your browser does not support the audio element."]
+})] }), /* @__PURE__ */ jsxs("figcaption", { children: [/* @__PURE__ */ jsx("div", {
+	class: "caption",
+	children: caption ? raw(caption) : null
+}), /* @__PURE__ */ jsx("div", {
+	class: "credit",
+	children: credit ? raw(credit) : null
+})] })] }));
+//#endregion
+//#region lib/routes/bloomberg/templates/chart-media.tsx
+const renderChartMedia = ({ chart }) => renderToString(/* @__PURE__ */ jsxs("figure", { children: [
+	chart.title ? /* @__PURE__ */ jsx(Fragment, { children: chart.title }) : null,
+	chart.subtitle ? /* @__PURE__ */ jsx("p", { children: chart.subtitle }) : null,
+	/* @__PURE__ */ jsx("noscript", { children: /* @__PURE__ */ jsx("img", {
+		src: chart.fallback,
+		alt: chart.chartAlt,
+		loading: "lazy",
+		style: "display:block; margin-left:auto; margin-right:auto; width:100%;"
+	}) }),
+	/* @__PURE__ */ jsx("iframe", {
+		id: chart.chartId,
+		title: chart.title,
+		referrerpolicy: "no-referrer",
+		width: "100%",
+		height: "150vh",
+		frameborder: "0",
+		marginheight: "0",
+		marginwidth: "0",
+		loading: "lazy",
+		scrolling: "no",
+		style: "border:0; margin:0; padding:0; width:100%; height:150vh;",
+		src: chart.url
+	}),
+	chart.source ? /* @__PURE__ */ jsxs("figcaption", { children: [/* @__PURE__ */ jsx("div", {
+		class: "source",
+		children: raw(chart.source)
+	}), chart.footnote ? /* @__PURE__ */ jsx("p", { children: chart.footnote }) : null] }) : null
+] }));
+//#endregion
+//#region lib/routes/bloomberg/templates/image-figure.tsx
+const renderImageFigure = ({ src, alt, caption, credit }) => renderToString(/* @__PURE__ */ jsxs("figure", { children: [/* @__PURE__ */ jsx("img", {
+	src,
+	alt,
+	loading: "lazy",
+	style: "display:block; margin-left:auto; margin-right:auto; width:100%;"
+}), caption || credit ? /* @__PURE__ */ jsxs("figcaption", { children: [/* @__PURE__ */ jsx("div", {
+	class: "caption",
+	children: caption ? raw(caption) : null
+}), /* @__PURE__ */ jsx("div", {
+	class: "credit",
+	children: credit ? raw(credit) : null
+})] }) : null] }));
+//#endregion
+//#region lib/routes/bloomberg/templates/video-media.tsx
+const renderVideoMedia = ({ stream, mp4, coverUrl, caption }) => renderToString(/* @__PURE__ */ jsxs("figure", { children: [/* @__PURE__ */ jsxs("video", {
+	controls: true,
+	playsinline: "true",
+	"webkit-playsinline": "true",
+	"x5-playsinline": "true",
+	"x5-video-player-type": "h5",
+	"x5-video-orientation": "landscape|portrait",
+	"x5-video-player-fullscreen": "true",
+	"x-webkit-airplay": "allow",
+	preload: "metadata",
+	poster: coverUrl,
+	children: [stream ? /* @__PURE__ */ jsx("source", {
+		src: stream,
+		type: "application/x-mpegURL"
+	}) : null, mp4 ? /* @__PURE__ */ jsx("source", {
+		src: mp4,
+		type: "video/mp4"
+	}) : null]
+}), caption ? /* @__PURE__ */ jsx("figcaption", { children: /* @__PURE__ */ jsx("div", {
+	class: "caption",
+	children: raw(caption)
+}) }) : null] }));
+//#endregion
+//#region lib/routes/bloomberg/templates/lede-media.tsx
+const renderLedeMedia = (media) => {
+	if (media?.kind === "video") return renderVideoMedia(media.video ?? {});
+	if (media?.kind === "image") return renderToString(/* @__PURE__ */ jsxs("figure", { children: [/* @__PURE__ */ jsx("img", {
+		src: media.src,
+		alt: media.description,
+		loading: "lazy",
+		style: "display:block; margin-left:auto; margin-right:auto; width:100%;"
+	}), media.caption ? /* @__PURE__ */ jsxs("figcaption", { children: [/* @__PURE__ */ jsx("div", {
+		class: "caption",
+		children: raw(media.caption)
+	}), /* @__PURE__ */ jsx("div", {
+		class: "credit",
+		children: media.credit ? raw(media.credit) : null
+	})] }) : null] }));
+	return "";
+};
+//#endregion
+//#region lib/routes/bloomberg/utils.ts
+const rootUrl = "https://www.bloomberg.com/feeds";
+const idSel = "script[id^=\"article-info\"][type=\"application/json\"], script[class^=\"article-info\"][type=\"application/json\"], script#dvz-config";
+const idUrl = "https://www.bloomberg.com/article/api/story/id/";
+const headers = {
+	accept: "application/json",
+	"cache-control": "no-cache",
+	referer: "https://www.bloomberg.com"
+};
+const apiEndpoints = {
+	articles: { url: "https://www.bloomberg.com/article/api/story/slug/" },
+	features: { url: "https://www.bloomberg.com/article/api/story/slug/" },
+	audio: {
+		url: "https://www.bloomberg.com/news/audio/",
+		sel: "script#__NEXT_DATA__"
+	},
+	videos: {
+		url: "https://www.bloomberg.com/news/videos/",
+		sel: "script"
+	},
+	newsletters: { url: "https://www.bloomberg.com/article/api/story/slug/" },
+	"photo-essays": {
+		url: "https://www.bloomberg.com/javelin/api/photo-essay_transporter/",
+		sel: "script[type = \"application/json\"][data-component-props]"
+	},
+	"features/": {
+		url: "https://www.bloomberg.com/features/",
+		sel: idSel,
+		prop: "id"
+	}
+};
+const regex = [/\/(?<page>[\w-]*)\/(?<link>\d{4}-\d{2}-\d{2}\/.*)/, /(?<!news|politics)\/(?<page>features\/|graphics\/)(?<link>.*)/];
+const capRegex = /<p>|<\/p>/g;
+const emptyRegex = /<p\b[^>]*>(&nbsp;|\s)<\/p>/g;
+const redirectGot = (url) => rofetch.raw(url, {
+	headers,
+	parseResponse: (responseText) => ({
+		data: destr(responseText),
+		body: responseText
+	})
+});
+const parseNewsList = async (url, ctx) => {
+	const $ = load((await got_default(url)).data, { xml: { xmlMode: true } });
+	return $("urlset url").toArray().slice(0, ctx.req.query("limit") ? Number.parseInt(ctx.req.query("limit")) : 50).map((u) => {
+		u = $(u);
+		return {
+			title: u.find(String.raw`news\:title`).text(),
+			link: u.find("loc").text(),
+			pubDate: parseDate(u.find(String.raw`news\:publication_date`).text())
+		};
+	});
+};
+const parseArticle = (item) => cache_default.tryGet(item.link, async () => {
+	const group = regex.map((r) => r.exec(item.link)).filter((e) => e && e.groups).map((a) => a && a.groups)[0];
+	if (group) {
+		const { page, link } = group;
+		if (Object.hasOwn(apiEndpoints, page)) {
+			const api = { ...apiEndpoints[page] };
+			let res;
+			try {
+				const apiUrl = `${api.url}${link}`;
+				res = await redirectGot(apiUrl);
+			} catch (error) {
+				if (error.name && [
+					"HTTPError",
+					"RequestError",
+					"FetchError"
+				].includes(error.name)) try {
+					res = await redirectGot(item.link);
+				} catch {
+					return {
+						title: item.title,
+						link: item.link,
+						pubDate: item.pubDate
+					};
+				}
+			}
+			if (res.redirected && new URL(res.url).pathname === "/tosv2.html" || res.status === 404) return {
+				title: item.title,
+				link: item.link,
+				pubDate: item.pubDate
+			};
+			switch (page) {
+				case "audio": return parseAudioPage(res._data, api, item);
+				case "videos": return parseVideoPage(res._data, api, item);
+				case "photo-essays": return parsePhotoEssaysPage(res._data, api, item);
+				case "features/": return parseReactRendererPage(res._data, api, item);
+				default: return parseStoryJson(res._data.data, item);
+			}
+		}
+	}
+	return item;
+});
+const parseAudioPage = async (res, api, item) => {
+	const audio_json = JSON.parse(load(res.data)(api.sel).html()).props.pageProps;
+	const episode = audio_json.episode;
+	return {
+		title: episode.title || item.title,
+		link: audio_json.pageInfo.canonicalUrl || item.link,
+		guid: `bloomberg:${episode.id}`,
+		description: (await processBody(episode.articleBody, audio_json)).replaceAll(emptyRegex, ""),
+		pubDate: parseDate(episode.publishedAt) || item.pubDate,
+		author: audio_json.hero.showTitle,
+		media: {
+			content: { url: episode.image },
+			thumbnails: { url: episode.image }
+		},
+		enclosure_type: "audio/mpeg",
+		enclosure_url: episode.url,
+		itunes_item_image: episode.image || audio_json.pageInfo.image.url
+	};
+};
+const parseVideoPage = async (res, api, item) => {
+	const $ = load(res.data);
+	const json = $(api.sel).filter((i, el) => $(el).text().includes("__PRELOADED_STATE__")).text().trim().match(/window\.__PRELOADED_STATE__ = (.*?);/)?.[1];
+	const article_json = JSON.parse(json || "{}");
+	const video_story = article_json.video?.videoStory ?? article_json.quicktakeVideo?.videoStory;
+	if (video_story) {
+		const desc = await processVideo(video_story.video.bmmrId, video_story.summary.html.replaceAll(emptyRegex, ""));
+		return {
+			title: video_story.headline.text || item.title,
+			link: video_story.url || item.link,
+			guid: `bloomberg:${video_story.id}`,
+			description: renderVideoMedia(desc),
+			pubDate: parseDate(video_story.publishedAt) || item.pubDate,
+			media: {
+				content: { url: video_story.video?.thumbnail.url || "" },
+				thumbnails: { url: video_story.video?.thumbnail.url || "" }
+			},
+			category: desc.keywords ?? []
+		};
+	}
+	return item;
+};
+const parsePhotoEssaysPage = async (res, api, item) => {
+	const $ = load(res.data.html);
+	const article_json = {};
+	for (const e of $(api.sel).toArray()) Object.assign(article_json, JSON.parse($(e).html()));
+	return {
+		title: article_json.headline || item.title,
+		link: article_json.canonical || item.link,
+		guid: `bloomberg:${article_json.id}`,
+		description: (await processBody(article_json.body, article_json)).replaceAll(emptyRegex, ""),
+		pubDate: item.pubDate,
+		author: article_json.authors?.map((a) => a.name).join(", ") ?? []
+	};
+};
+const parseReactRendererPage = async (res, api, item) => {
+	const json = load(res.data)(api.sel).text().trim();
+	const story_id = JSON.parse(json)[api.prop];
+	try {
+		const res = await redirectGot(`${idUrl}${story_id}`);
+		return await parseStoryJson(res._data, item);
+	} catch (error) {
+		if (error.name && [
+			"HTTPError",
+			"RequestError",
+			"FetchError"
+		].includes(error.name)) return {
+			title: item.title,
+			link: item.link,
+			pubDate: item.pubDate
+		};
+	}
+};
+const parseStoryJson = async (story_json, item) => {
+	const media_img = story_json.ledeImageUrl || Object.values(story_json.imageAttachments ?? {})[0]?.url;
+	return {
+		title: story_json.headline || item.title,
+		link: story_json.url || item.link,
+		guid: `bloomberg:${story_json.id}`,
+		description: processHeadline(story_json) + await processLedeMedia(story_json) + await documentToHtmlString(story_json.body || ""),
+		pubDate: parseDate(story_json.publishedAt) || item.pubDate,
+		author: story_json.authors?.map((a) => a.name).join(", ") ?? [],
+		category: story_json.mostRelevantTags ?? [],
+		media: {
+			content: { url: media_img },
+			thumbnails: { url: media_img }
+		}
+	};
+};
+const processHeadline = (story_json) => {
+	const dek = story_json.dek || story_json.summary || story_json.headline || "";
+	const abs = story_json.abstract?.map((a) => `<li>${a}</li>`).join("");
+	return abs ? dek + `<ul>${abs}</ul>` : dek;
+};
+const processLedeMedia = async (story_json) => {
+	if (story_json.ledeMediaKind) {
+		const kind = story_json.ledeMediaKind;
+		return renderLedeMedia({
+			kind: story_json.ledeMediaKind,
+			caption: story_json.ledeCaption?.replaceAll(capRegex, "") ?? "",
+			description: story_json.ledeDescription?.replaceAll(capRegex, "") ?? "",
+			credit: story_json.ledeCredit?.replaceAll(capRegex, "") ?? "",
+			src: story_json.ledeImageUrl,
+			video: kind === "video" && await processVideo(story_json.ledeAttachment.bmmrId)
+		});
+	}
+	if (story_json.lede) {
+		const lede = story_json.lede;
+		return renderImageFigure({
+			src: lede.url,
+			alt: lede.alt || lede.title,
+			caption: lede.caption?.replaceAll(capRegex, "") ?? "",
+			credit: lede.credit?.replaceAll(capRegex, "") ?? ""
+		});
+	}
+	if (story_json.imageAttachments) {
+		const attachment = Object.values(story_json.imageAttachments)[0];
+		if (attachment) return renderImageFigure({
+			src: attachment.baseUrl || attachment.url,
+			alt: attachment.alt || attachment.title,
+			caption: attachment.caption?.replaceAll(capRegex, "") ?? "",
+			credit: attachment.credit?.replaceAll(capRegex, "") ?? ""
+		});
+		return "";
+	}
+	if (story_json.type === "Lede") {
+		const props = story_json.props;
+		return renderLedeMedia({
+			kind: props.media,
+			caption: props.caption?.replaceAll(capRegex, "") ?? "",
+			description: props.dek?.replaceAll(capRegex, "") ?? "",
+			credit: props.credit?.replaceAll(capRegex, "") ?? "",
+			src: props.url
+		});
+	}
+};
+const processBody = async (body_html, story_json) => {
+	const removeSel = [
+		"meta",
+		"script",
+		"*[class$=\"-footnotes\"]",
+		"*[class$=\"for-you\"]",
+		"*[class$=\"-newsletter\"]",
+		"*[class$=\"page-ad\"]",
+		"*[class$=\"-recirc\"]",
+		"*[data-ad-placeholder=\"Advertisement\"]"
+	];
+	const $ = load(body_html);
+	for (const sel of removeSel) $(sel).remove();
+	$(".paywall").removeAttr("class");
+	for await (const e of $("figure")) {
+		const imageType = $(e).data("image-type");
+		const type = $(e).data("type");
+		let new_figure = "";
+		if (imageType === "audio") {
+			let audio = {};
+			if (story_json.audios) {
+				const attachment = story_json.audios.find((a) => a.id.toString() === $(e).data("id").toString());
+				audio = {
+					img: attachment.image?.url || $(e).find("img").attr("src"),
+					src: attachment.url || $(e).find("audio source").attr("src"),
+					caption: $(e).find("[class$=\"text\"]").html()?.trim() ?? "",
+					credit: $(e).find("[class$=\"credit\"]").html()?.trim() ?? ""
+				};
+			}
+			if (story_json.episode) {
+				const episode = story_json.episode;
+				audio = {
+					src: episode.url,
+					img: episode.image || story_json.pageInfo.image.url,
+					caption: episode.description || ($(e).find("[class$=\"text\"]").html()?.trim() ?? ""),
+					credit: (episode.credits.map((c) => c.name).join(", ") ?? []) || ($(e).find("[class$=\"credit\"]").html()?.trim() ?? "")
+				};
+			}
+			new_figure = renderAudioMedia(audio);
+		} else if (imageType === "video") {
+			if (story_json.videoAttachments) {
+				const attachment = story_json.videoAttachments[$(e).data("id")];
+				new_figure = renderVideoMedia(await processVideo(attachment.bmmrId));
+			}
+		} else if (imageType === "photo" || imageType === "image" || type === "image") {
+			let src, alt;
+			if (story_json.imageAttachments) {
+				const attachment = story_json.imageAttachments[$(e).data("id")];
+				alt = attachment?.alt || $(e).find("img").attr("alt")?.trim();
+				src = attachment?.baseUrl;
+			} else {
+				alt = $(e).find("img").attr("alt").trim();
+				src = $(e).find("img").data("native-src");
+			}
+			const caption = $(e).find("[class$=\"text\"], .caption, .photo-essay__text").html()?.trim() ?? "";
+			const credit = $(e).find("[class$=\"credit\"], .credit, .photo-essay__source").html()?.trim() ?? "";
+			new_figure = renderImageFigure({
+				src,
+				alt,
+				caption,
+				credit
+			});
+		}
+		$(new_figure).insertAfter(e);
+		$(e).remove();
+	}
+	return $.html();
+};
+const processVideo = async (bmmrId, summary) => {
+	const api = `https://www.bloomberg.com/multimedia/api/embed?id=${bmmrId}`;
+	const res = await redirectGot(api);
+	if (res.redirected && new URL(res.url).pathname === "/tosv2.html" || res.status === 404) return {
+		stream: "",
+		mp4: "",
+		coverUrl: "",
+		caption: summary
+	};
+	if (res._data.data) {
+		const video_json = res._data.data;
+		return {
+			stream: video_json.streams ? video_json.streams[0]?.url : "",
+			mp4: video_json.downloadURLs ? video_json.downloadURLs["600"] : "",
+			coverUrl: video_json.thumbnail?.baseUrl ?? "",
+			caption: video_json.description || video_json.title || summary
+		};
+	}
+	return {
+		stream: "",
+		mp4: "",
+		coverUrl: "",
+		caption: summary
+	};
+};
+const nodeRenderers = {
+	paragraph: async (node, nextNode) => `<p>${await nextNode(node.content)}</p>`,
+	text: (node) => {
+		const { attributes: attr, value: val } = node;
+		if (attr?.emphasis && attr.strong) return `<strong><em>${val}</em></strong>`;
+		if (attr?.emphasis) return `<em>${val}</em>`;
+		if (attr?.strong) return `<strong>${val}</strong>`;
+		return val;
+	},
+	"inline-newsletter": async (node, nextNode) => `<div>${await nextNode(node.content)}</div>`,
+	"inline-recirc": async (node, nextNode) => `<div>${await nextNode(node.content)}</div>`,
+	heading: async (node, nextNode) => {
+		const nodeData = node.data;
+		if (nodeData.level === 2 || nodeData.level === 3) return `<h3>${await nextNode(node.content)}</h3>`;
+	},
+	link: async (node, nextNode) => {
+		const dest = node.data.destination;
+		const web = dest.web;
+		const bbg = dest.bbg;
+		const title = node.data.title;
+		if (web) return `<a href="${web}" title="${title}" target="_blank">${await nextNode(node.content)}</a>`;
+		if (bbg && bbg.startsWith("bbg://news/stories")) {
+			const o = bbg.split("bbg://news/stories/").pop();
+			return `<a href="${"https://www.bloomberg.com/news/terminal/".concat(o)}" title="${title}" target="_blank">${await nextNode(node.content)}</a>`;
+		}
+		return String(await nextNode(node.content));
+	},
+	entity: async (node, nextNode) => {
+		const t = node.subType;
+		const web = node.data.link.destination.web;
+		if (t === "person") return nextNode(node.content);
+		if (t === "story") {
+			if (web) return `<a href="${web}" target="_blank">${await nextNode(node.content)}</a>`;
+			const a = node.data.story.identifiers.suid;
+			return `<a href="${"https://www.bloomberg.com/news/terminal/".concat(a)}" target="_blank">${await nextNode(node.content)}</a>`;
+		}
+		if (t === "security") {
+			const s = node.data.security.identifiers.parsekey;
+			if (s) {
+				const c = s.split(" ");
+				return `<a href="${[..."https://www.bloomberg.com/quote/".concat(c[0], ":"), c[1]]}" target="_blank">${await nextNode(node.content)}</a>`;
+			}
+		}
+		return nextNode(node.content);
+	},
+	br: () => "<br/>",
+	hr: () => "<br/>",
+	ad: () => {},
+	blockquote: async (node, nextNode) => `<blockquote>${await nextNode(node.content)}</blockquote>`,
+	quote: async (node, nextNode) => `<blockquote>${await nextNode(node.content)}</blockquote>`,
+	aside: async (node, nextNode) => `<aside>${await nextNode(node.content)}</aside>`,
+	list: async (node, nextNode) => {
+		const t = node.subType;
+		if (t === "unordered") return `<ul>${await nextNode(node.content)}</ul>`;
+		if (t === "ordered") return `<ol>${await nextNode(node.content)}</ol>`;
+	},
+	listItem: async (node, nextNode) => `<li>${await nextNode(node.content)}</li>`,
+	media: async (node) => {
+		const t = node.subType;
+		if (t === "chart" && node.data.attachment) {
+			if (node.data.attachment.creator === "TOASTER") {
+				const c = node.data.chart;
+				const e = {
+					src: c && c.fallback || "",
+					chart: node.data.attachment,
+					id: c && c.id || "",
+					alt: c && c.alt || ""
+				};
+				const w = e.chart;
+				return renderChartMedia({ chart: {
+					source: w.source,
+					footnote: w.footnote,
+					url: w.url,
+					title: w.title,
+					subtitle: w.subtitle,
+					chartId: "toaster-chart-".concat(e.id),
+					chartAlt: e.alt,
+					fallback: e.src
+				} });
+			}
+			return renderImageFigure({
+				alt: node.data.attachment?.footnote || "",
+				caption: node.data.attachment?.title + node.data.attachment.subtitle || "",
+				credit: node.data.attachment?.source || "",
+				src: node.data.chart?.fallback || ""
+			});
+		}
+		if (t === "photo") {
+			const h = node.data;
+			let img = "";
+			if (h.attachment) img = renderImageFigure({
+				src: h.photo?.src,
+				alt: h.photo?.alt,
+				caption: h.photo?.caption,
+				credit: h.photo?.credit
+			});
+			if (h.link && h.link.destination && h.link.destination.web) return `<a href="${h.link.destination.web}" target="_blank">${img}</a>`;
+			return img;
+		}
+		if (t === "video") {
+			const h = node.data;
+			const id = h.attachment?.id;
+			if (id) return renderVideoMedia(await processVideo(id, h.attachment?.title));
+		}
+		if (t === "audio" && node.data.attachment) {
+			const B = node.data.attachment;
+			const P = B.title;
+			const D = B.url;
+			const M = B.image;
+			if (P && D) return renderAudioMedia({
+				src: D,
+				img: M.url,
+				caption: P,
+				credit: ""
+			});
+		}
+		return "";
+	},
+	tabularData: async (node, nextNode) => `<table>${await nextNode(node.content)}</table>`,
+	columns: (node) => {
+		return `<tr>${node.data.definitions.map((e) => ({
+			title: e.title,
+			span: e.colSpan || 1,
+			type: e.dataType
+		})).map((e) => `<th colspan=${e.span}>${e.title}</th>`)}</tr>`;
+	},
+	row: async (node, nextNode) => `<tr>${await nextNode(node.content)}</tr>`,
+	cell: async (node, nextNode) => {
+		return `<td data-coltype=${{
+			"news-rsf-table-number": "number",
+			"news-rsf-table-string": "text"
+		}[node.data.class] || "text"} colspan=${node.data.colspan}>${await nextNode(node.content)}</td>`;
+	}
+};
+const nextNode = async (nodes) => {
+	return await nodeListToHtmlString(nodes);
+};
+const nodeToHtmlString = async (node, obj) => {
+	if (!node.type || !Object.hasOwn(nodeRenderers, node.type)) return `<node>${node.type}</node>`;
+	return await nodeRenderers[node.type](node, nextNode, obj);
+};
+const nodeListToHtmlString = async (nodes) => {
+	return (await Promise.all(nodes.map(async (node, index) => {
+		return await nodeToHtmlString(node, {
+			index,
+			prev: nodes[index - 1]?.type,
+			next: nodes[index + 1]?.type
+		});
+	}))).join("");
+};
+const documentToHtmlString = async (document) => {
+	if (!document || !document.content) return "";
+	return await nodeListToHtmlString(document.content);
+};
+//#endregion
+export { parseNewsList as n, rootUrl as r, parseArticle as t };

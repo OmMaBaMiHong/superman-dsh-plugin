@@ -1,0 +1,53 @@
+import { t as got_default } from "./got-Dnzt41dd.mjs";
+import { t as cache_default } from "./cache-DzpZriu0.mjs";
+//#region lib/routes/bilibili/reply.ts
+const route = {
+	path: "/video/reply/:bvid",
+	categories: ["social-media"],
+	example: "/bilibili/video/reply/BV1vA411b7ip",
+	parameters: { bvid: "可在视频页 URL 中找到" },
+	features: {
+		requireConfig: false,
+		requirePuppeteer: false,
+		antiCrawler: false,
+		supportBT: false,
+		supportPodcast: false,
+		supportScihub: false
+	},
+	name: "视频评论",
+	maintainers: ["Qixingchen"],
+	handler
+};
+async function handler(ctx) {
+	let bvid = ctx.req.param("bvid");
+	let aid;
+	if (!bvid.startsWith("BV")) {
+		aid = bvid;
+		bvid = null;
+	}
+	const name = await cache_default.getVideoNameFromId(aid, bvid);
+	if (!aid) aid = await cache_default.getAidFromBvid(bvid);
+	const link = `https://www.bilibili.com/video/${bvid || `av${aid}`}`;
+	const cookie = await cache_default.getCookie();
+	const data = (await got_default({
+		method: "get",
+		url: `https://api.bilibili.com/x/v2/reply?type=1&oid=${aid}&sort=0`,
+		headers: {
+			Referer: link,
+			Cookie: cookie
+		}
+	})).data.data.replies;
+	return {
+		title: `${name} 的 评论`,
+		link,
+		description: `${name} 的评论`,
+		item: data.map((item) => ({
+			title: `${item.member.uname} : ${item.content.message}`,
+			description: `${item.member.uname} : ${item.content.message}`,
+			pubDate: (/* @__PURE__ */ new Date(item.ctime * 1e3)).toUTCString(),
+			link: `${link}/#reply${item.rpid}`
+		}))
+	};
+}
+//#endregion
+export { route };

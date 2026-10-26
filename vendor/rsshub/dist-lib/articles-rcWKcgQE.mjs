@@ -1,0 +1,91 @@
+import { t as rofetch } from "./ofetch-DleGqjHs.mjs";
+import { t as parseDate } from "./parse-date-Cr0wQjV_.mjs";
+import { t as cache_default } from "./cache-CNhdNI4T.mjs";
+import { load } from "cheerio";
+import markdownit from "markdown-it";
+//#region lib/routes/leetcode/articles.ts
+const md = markdownit({
+	html: true,
+	breaks: true
+});
+const host = "https://leetcode.com";
+const gqlEndpoint = `${host}/graphql`;
+const route = {
+	path: "/articles",
+	categories: ["programming"],
+	example: "/leetcode/articles",
+	parameters: {},
+	features: {
+		requireConfig: false,
+		requirePuppeteer: false,
+		antiCrawler: false,
+		supportBT: false,
+		supportPodcast: false,
+		supportScihub: false
+	},
+	radar: [{ source: ["leetcode.com/articles"] }],
+	name: "Articles",
+	maintainers: ["LogicJake"],
+	handler,
+	url: "leetcode.com/articles"
+};
+async function handler() {
+	const link = new URL("/articles/", host).href;
+	const $ = load(await rofetch(link, { parseResponse: (txt) => txt }));
+	const list = $("a.list-group-item").toArray().filter((e) => $(e).find("h4.media-heading i").length === 0).map((item) => {
+		return {
+			title: $(item).find("h4.media-heading").text().trim(),
+			author: $(item).find(".text-500").text(),
+			link: new URL($(item).attr("href"), host).href,
+			pubDate: $(item).find("p.pull-right.media-date strong").text().trim()
+		};
+	});
+	const out = await Promise.all(list.map((info) => cache_default.tryGet(info.link, async () => {
+		const titleSlug = info.link.split("/", 5)[4];
+		const questionContent = await rofetch(gqlEndpoint, {
+			method: "POST",
+			body: {
+				operationName: "questionContent",
+				variables: { titleSlug },
+				query: `
+                            query questionContent($titleSlug: String!) {
+                                question(titleSlug: $titleSlug) {
+                                    content
+                                    mysqlSchemas
+                                    dataSchemas
+                                }
+                            }
+                        `
+			}
+		});
+		const officialSolution = await rofetch(gqlEndpoint, {
+			method: "POST",
+			body: {
+				operationName: "officialSolution",
+				variables: { titleSlug },
+				query: `
+                            query officialSolution($titleSlug: String!) {
+                                question(titleSlug: $titleSlug) {
+                                    solution {
+                                        content
+                                    }
+                                }
+                            }
+                        `
+			}
+		});
+		const solution = md.render(officialSolution.data.question.solution.content);
+		info.description = (questionContent.data.question.content?.trim() ?? "") + solution;
+		info.pubDate = parseDate(info.pubDate);
+		return info;
+	})));
+	return {
+		title: $("head title").text(),
+		description: $("meta[property=\"og:description\"]").attr("content"),
+		image: "https://assets.leetcode.com/static_assets/public/icons/favicon-192x192.png",
+		link,
+		item: out
+	};
+}
+//#endregion
+export { route };

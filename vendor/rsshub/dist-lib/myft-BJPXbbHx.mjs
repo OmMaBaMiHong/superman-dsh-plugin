@@ -1,0 +1,54 @@
+import { t as cache_default } from "./cache-CNhdNI4T.mjs";
+import { t as got_default } from "./got-Dnzt41dd.mjs";
+import { t as parser } from "./rss-parser-lNYr71DQ.mjs";
+import { load } from "cheerio";
+//#region lib/routes/ft/myft.ts
+const route = {
+	path: "/myft/:key",
+	categories: ["traditional-media"],
+	example: "/ft/myft/rss-key",
+	parameters: { key: "the last part of myFT personal RSS address" },
+	features: {
+		requireConfig: false,
+		requirePuppeteer: false,
+		antiCrawler: false,
+		supportBT: false,
+		supportPodcast: false,
+		supportScihub: false
+	},
+	name: "myFT personal RSS",
+	maintainers: ["HenryQW"],
+	handler,
+	description: `::: tip
+
+- Visit ft.com -> myFT -> Contact Preferences to enable personal RSS feed, see [help.ft.com](https://help.ft.com/faq/email-alerts-and-contact-preferences/what-is-myft-rss-feed/)
+- Obtain the key from the personal RSS address, it looks like \`12345678-abcd-4036-82db-vdv20db024b8\`
+
+:::`
+};
+async function handler(ctx) {
+	const ProcessFeed = (content) => {
+		content.find("div.o-share, aside, div.o-ads").remove();
+		return content.html();
+	};
+	const link = `https://www.ft.com/myft/following/${ctx.req.param("key")}.rss`;
+	const feed = await parser.parseURL(link);
+	return {
+		title: "FT.com - myFT",
+		link,
+		description: "FT.com - myFT",
+		item: await Promise.all(feed.items.map((item) => cache_default.tryGet(item.link, async () => {
+			const $ = load((await got_default({
+				method: "get",
+				url: item.link,
+				headers: { Referer: "https://www.facebook.com" }
+			})).data);
+			item.description = ProcessFeed($("article.js-article__content-body"));
+			item.category = [$(".n-content-tag--with-follow").text(), ...$(".article__right-bottom a.concept-list__concept").toArray().map((e) => $(e).text().trim())];
+			item.author = $("a.n-content-tag--author").toArray().map((e) => ({ name: $(e).text() }));
+			return item;
+		})))
+	};
+}
+//#endregion
+export { route };

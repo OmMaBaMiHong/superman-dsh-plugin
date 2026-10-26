@@ -1,0 +1,8 @@
+packages:
+  - .
+  - vendor/rsshub
+
+# pnpm 10 默认拦截依赖构建脚本；只放行插件运行时真正需要的原生模块。
+# rsshub 的 sharp/esbuild/patchright 等按需再放行。
+onlyBuiltDependencies:
+  - better-sqlite3

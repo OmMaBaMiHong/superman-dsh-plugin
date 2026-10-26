@@ -1,0 +1,47 @@
+import { n as parseRelativeDate } from "./parse-date-Cr0wQjV_.mjs";
+import { t as cache_default } from "./cache-CNhdNI4T.mjs";
+import { t as got_default } from "./got-Dnzt41dd.mjs";
+import { load } from "cheerio";
+//#region lib/routes/woshipm/wen.ts
+const baseUrl = "https://wen.woshipm.com";
+const route = {
+	path: "/wen",
+	categories: ["new-media"],
+	example: "/woshipm/wen",
+	parameters: {},
+	features: {
+		requireConfig: false,
+		requirePuppeteer: false,
+		antiCrawler: false,
+		supportBT: false,
+		supportPodcast: false,
+		supportScihub: false
+	},
+	radar: [{ source: ["wen.woshipm.com/"] }],
+	name: "天天问",
+	maintainers: ["WenryXu"],
+	handler,
+	url: "wen.woshipm.com/"
+};
+async function handler() {
+	const $ = load((await got_default(`${baseUrl}/m/main/indexNewData.html`)).data);
+	const postList = $(".article-list-item").toArray().map((item) => {
+		item = $(item);
+		return {
+			title: item.find(".went-head-text").text(),
+			link: `${baseUrl}${item.find(".went-head").attr("href")}`,
+			pubDate: parseRelativeDate(item.find(".list-text").text().split("|", 2)[1])
+		};
+	});
+	const result = await Promise.all(postList.map((item) => cache_default.tryGet(item.link, async () => {
+		item.description = load((await got_default(item.link)).data)(".wt-desc").html();
+		return item;
+	})));
+	return {
+		title: "天天问 - 人人都是产品经理",
+		link: baseUrl,
+		item: result
+	};
+}
+//#endregion
+export { route };

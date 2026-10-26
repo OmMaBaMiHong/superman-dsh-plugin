@@ -1,0 +1,75 @@
+import { t as rofetch } from "./ofetch-DleGqjHs.mjs";
+import { t as config } from "./config-B5Cf_tHS.mjs";
+import { t as parseDate } from "./parse-date-Cr0wQjV_.mjs";
+import { t as cache_default } from "./cache-CNhdNI4T.mjs";
+import { t as renderComic } from "./comic-C5budFhR.mjs";
+import pMap from "p-map";
+//#region lib/routes/zaimanhua/comic.ts
+const route = {
+	path: "/comic/:id",
+	categories: ["anime"],
+	parameters: { id: "漫画ID" },
+	example: "/zaimanhua/comic/57069",
+	features: {
+		requireConfig: [{
+			name: "ZAIMANHUA_TOKEN",
+			optional: true,
+			description: "用户登录后，可以从浏览器开发者工具 Network 面板中的请求信息中获取 token，使用请求中的 `Authorization` 的值，完整设置为 `Bearer <token>`，或直接设置 token 并由路由自动补齐 `Bearer ` 前缀。"
+		}],
+		requirePuppeteer: false,
+		antiCrawler: false,
+		supportBT: false,
+		supportPodcast: false,
+		supportScihub: false,
+		nsfw: true
+	},
+	radar: [{
+		source: ["manhua.zaimanhua.com/details", "manhua.zaimanhua.com/details/:id"],
+		target: "/comic/:id"
+	}],
+	name: "漫画更新",
+	maintainers: ["kjasn"],
+	description: `::: Warning
+未登录用户无法获取到所有漫画，需要设置\`ZAIMANHUA_TOKEN\`环境变量以使用 API 授权访问。
+且由于源网站本身的限制，建议尽量在部署于中国大陆网络内的 RSSHub 节点中使用本路由。若在海外网络环境中使用，即使设置了\`ZAIMANHUA_TOKEN\`环境变量，也可能无法获取全部漫画。
+:::`,
+	handler
+};
+async function handler(ctx) {
+	const baseUrl = "https://manhua.zaimanhua.com";
+	const id = ctx.req.param("id");
+	const currentComicUrl = `${baseUrl}/api/v1/comic2/comic/detail?id=${id}`;
+	const headers = {
+		"user-agent": config.trueUA,
+		referer: baseUrl
+	};
+	const token = config.zaimanhua.token;
+	if (token) headers.Authorization = token.startsWith("Bearer ") ? token : `Bearer ${token}`;
+	const comicInfo = (await rofetch(currentComicUrl, { headers })).data.comicInfo;
+	const status = comicInfo.chapterList[0].title;
+	const data = comicInfo.chapterList[0].data;
+	const comicPy = comicInfo.comicPy;
+	const comicTitle = comicInfo.title;
+	const items = await pMap(data, async (item) => {
+		const chapterUrl = `${baseUrl}/api/v1/comic2/chapter/detail?comic_id=${id}&chapter_id=${item.chapter_id}`;
+		return await cache_default.tryGet(chapterUrl, async () => {
+			const chapterData = (await rofetch(chapterUrl, { headers })).data;
+			const description = renderComic(chapterData.chapterInfo.page_url || []);
+			return {
+				title: `[${status}] | ${comicTitle} - ${item.chapter_title}`,
+				category: [status],
+				image: chapterData.chapterInfo.page_url?.[0] || "",
+				link: `${baseUrl}/view/${comicPy}/${id}/${item.chapter_id}`,
+				pubDate: parseDate(item.updatetime * 1e3),
+				description
+			};
+		});
+	}, { concurrency: 3 });
+	return {
+		title: `再漫画 - ${comicTitle}`,
+		link: `${baseUrl}/details/${id}`,
+		item: items
+	};
+}
+//#endregion
+export { route };

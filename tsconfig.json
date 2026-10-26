@@ -1,0 +1,31 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "preserve",
+    "moduleResolution": "bundler",
+    "lib": ["ES2022"],
+    "types": ["node"],
+    "strict": true,
+    "noUncheckedIndexedAccess": false,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "resolveJsonModule": true,
+    "declaration": false,
+    "noEmit": false,
+    "outDir": "dist",
+    "rootDir": ".",
+    "baseUrl": ".",
+    "paths": {
+      "@/core/*": ["kernel/core/*"],
+      "@/server/*": ["kernel/server/*"],
+      "@/lib/*": ["kernel/lib/*"],
+      "@/features/*": ["kernel/features/*"],
+      "@/worker/*": ["kernel/worker/*"],
+      "@/plugin/*": ["src/plugin/*"],
+      "@/types": ["kernel/types/index"],
+      "@/types/*": ["kernel/types/*"]
+    }
+  },
+  "include": ["src/**/*.ts", "kernel/**/*.ts"],
+  "exclude": ["node_modules", "dist", "vendor", "src/plugin/client", "src/plugin/public"]
+}

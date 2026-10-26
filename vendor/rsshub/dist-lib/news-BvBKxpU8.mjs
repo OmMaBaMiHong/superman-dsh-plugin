@@ -1,0 +1,57 @@
+import { t as parseDate } from "./parse-date-Cr0wQjV_.mjs";
+import { t as cache_default } from "./cache-CNhdNI4T.mjs";
+import { t as got_default } from "./got-Dnzt41dd.mjs";
+import { load } from "cheerio";
+import pMap from "p-map";
+//#region lib/routes/cts/news.ts
+const route = {
+	path: "/:category",
+	categories: ["traditional-media"],
+	example: "/cts/real",
+	parameters: { category: "类别" },
+	features: {
+		requireConfig: false,
+		requirePuppeteer: false,
+		antiCrawler: true,
+		supportBT: false,
+		supportPodcast: false,
+		supportScihub: false
+	},
+	radar: [{ source: ["news.cts.com.tw/:category/index.html"] }],
+	name: "新聞",
+	maintainers: ["miles170"],
+	handler,
+	description: `| 即時 | 氣象    | 政治     | 國際          | 社會    | 運動   | 生活 | 財經  | 台語      | 地方  | 產業 | 綜合    | 藝文 | 娛樂      |
+| ---- | ------- | -------- | ------------- | ------- | ------ | ---- | ----- | --------- | ----- | ---- | ------- | ---- | --------- |
+| real | weather | politics | international | society | sports | life | money | taiwanese | local | pr   | general | arts | entertain |`
+};
+async function handler(ctx) {
+	const currentUrl = `https://news.cts.com.tw/${ctx.req.param("category")}/index.html`;
+	const $ = load((await got_default(currentUrl)).data);
+	const limit = ctx.req.query("limit") ? Number.parseInt(ctx.req.query("limit")) : 20;
+	const items = await pMap($("#newslist-top a[title]").slice(0, limit), (item) => {
+		item = $(item);
+		const link = item.attr("href");
+		return cache_default.tryGet(link, async () => {
+			const $ = load((await got_default(link)).data);
+			const author = $(".artical-content p:eq(0)").text().trim();
+			$(".artical-content p:eq(0), .artical-content .flexbox").remove();
+			return {
+				title: item.attr("title"),
+				author,
+				description: $(".artical-content").html(),
+				category: $("meta[property=\"article:section\"]").attr("content"),
+				pubDate: parseDate($("meta[property=\"article:published_time\"]").attr("content")),
+				link
+			};
+		});
+	}, { concurrency: 5 });
+	return {
+		title: $("title").text(),
+		link: currentUrl,
+		description: $("meta[name=\"description\"]").attr("content"),
+		item: items
+	};
+}
+//#endregion
+export { route };

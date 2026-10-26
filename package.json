@@ -1,0 +1,66 @@
+{
+  "name": "superman-dsh-plugin",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "packageManager": "pnpm@10.30.3",
+  "engines": {
+    "node": ">=20.19.0"
+  },
+  "main": "dist/plugin/host/index.js",
+  "exports": {
+    ".": "./dist/plugin/host/index.js",
+    "./client": "./dist/plugin/client/index.js",
+    "./package.json": "./package.json"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "inject": [
+        "@deepseek-ai/dsh-client-runtime",
+        "@deepseek-ai/dsh-client-ui-slots"
+      ],
+      "platform": "web"
+    }
+  },
+  "scripts": {
+    "extract": "bash scripts/extract-from-superman.sh",
+    "build": "node scripts/build.mjs",
+    "type-check": "tsc --noEmit -p tsconfig.json",
+    "hotboard:sync": "tsx src/hotboard/run.ts"
+  },
+  "dependencies": {
+    "@electric-sql/pglite": "^0.5.8",
+    "@electric-sql/pglite-pgvector": "^0.0.9",
+    "@extractus/article-extractor": "^9.0.1",
+    "@mozilla/readability": "^0.6.0",
+    "@whisper-cpp-node/core": "^0.2.0",
+    "@whisper-cpp-node/darwin-arm64": "^0.2.12",
+    "better-sqlite3": "^13.0.3",
+    "busboy": "^1.6.0",
+    "got": "^14.6.6",
+    "ipaddr.js": "^2.3.0",
+    "jsdom": "^28.1.0",
+    "marked": "^16.4.2",
+    "openai": "^6.25.0",
+    "pg": "^8.18.0",
+    "pg-boss": "^12.13.0",
+    "rss-parser": "^3.13.0",
+    "sanitize-html": "^2.17.1",
+    "rsshub": "workspace:*",
+    "zod": "^4.3.6"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^9.6.0",
+    "@types/busboy": "^1.5.4",
+    "@types/jsdom": "^28.0.0",
+    "@types/node": "^24.10.1",
+    "@types/pg": "^8.16.0",
+    "@types/sanitize-html": "^2.16.0",
+    "esbuild": "^0.25.0",
+    "tsx": "^4.21.0",
+    "typescript": "^5.9.3"
+  }
+}

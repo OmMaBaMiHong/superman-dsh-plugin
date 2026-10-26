@@ -1,0 +1,72 @@
+import { t as parseDate } from "./parse-date-Cr0wQjV_.mjs";
+import { t as got_default } from "./got-Dnzt41dd.mjs";
+import { t as timezone } from "./timezone-BBvDwS_3.mjs";
+import { Fragment, jsx, jsxs } from "hono/jsx/jsx-runtime";
+import { load } from "cheerio";
+import { renderToString } from "hono/jsx/dom/server";
+import { raw } from "hono/html";
+//#region lib/routes/baidu/tieba/forum.tsx
+const route = {
+	path: ["/tieba/forum/good/:kw/:cid?/:sortBy?", "/tieba/forum/:kw/:sortBy?"],
+	categories: ["bbs"],
+	example: "/baidu/tieba/forum/good/女图",
+	parameters: {
+		kw: "吧名",
+		cid: "精品分类，默认为 `0`（全部分类），如果不传 `cid` 则获取全部分类",
+		sortBy: "排序方式：`created`, `replied`。默认为 `created`"
+	},
+	features: {
+		requireConfig: false,
+		requirePuppeteer: false,
+		antiCrawler: false,
+		supportBT: false,
+		supportPodcast: false,
+		supportScihub: false
+	},
+	name: "精品帖子",
+	maintainers: ["u3u"],
+	handler
+};
+async function handler(ctx) {
+	const { kw, cid = "0", sortBy = "created" } = ctx.req.param();
+	const params = { kw: encodeURIComponent(kw) };
+	ctx.req.path.includes("good") && (params.tab = "good");
+	cid && (params.cid = cid);
+	const { data } = await got_default("https://tieba.baidu.com/f", {
+		headers: { Referer: "https://tieba.baidu.com/" },
+		searchParams: params
+	});
+	const $ = load(load(data)("code[id=\"pagelet_html_frs-list/pagelet/thread_list\"]").contents().filter((e) => e.nodeType === "8").prevObject[0].data);
+	const list = $("#thread_list > .j_thread_list[data-field]").toArray().map((element) => {
+		const item = $(element);
+		const { id, author_name } = item.data("field");
+		const time = sortBy === "created" ? item.find(".is_show_create_time").text().trim() : item.find(".threadlist_reply_date").text().trim();
+		const title = item.find("a.j_th_tit").text().trim();
+		const details = item.find(".threadlist_abs").text().trim();
+		const medias = item.find(".threadlist_media img").toArray().map((element) => {
+			return `<img src="${$(element).attr("bpic")}">`;
+		}).join("");
+		return {
+			title,
+			description: renderToString(/* @__PURE__ */ jsxs(Fragment, { children: [
+				/* @__PURE__ */ jsx("p", { children: details }),
+				/* @__PURE__ */ jsx("p", { children: raw(medias) }),
+				/* @__PURE__ */ jsxs("p", { children: ["作者：", author_name] })
+			] })),
+			pubDate: timezone(parseDate(time, [
+				"HH:mm",
+				"M-D",
+				"YYYY-MM"
+			], true), 8),
+			link: `https://tieba.baidu.com/p/${id}`
+		};
+	});
+	return {
+		title: `${kw}吧`,
+		description: load(data)("meta[name=\"description\"]").attr("content"),
+		link: `https://tieba.baidu.com/f?kw=${encodeURIComponent(kw)}`,
+		item: list
+	};
+}
+//#endregion
+export { route };

@@ -1,0 +1,68 @@
+import { t as rofetch } from "./ofetch-DleGqjHs.mjs";
+import "./types-DNj6Etbg.mjs";
+import { t as parseDate } from "./parse-date-Cr0wQjV_.mjs";
+import { t as fetchArticle } from "./utils-Di-Yubas.mjs";
+import pMap from "p-map";
+//#region lib/routes/apnews/mobile-api.ts
+const route = {
+	path: "/mobile/:path{.+}?",
+	categories: ["traditional-media"],
+	example: "/apnews/mobile",
+	view: 0,
+	parameters: { path: {
+		description: "Corresponding path from AP News website",
+		default: "/"
+	} },
+	features: {
+		requireConfig: false,
+		requirePuppeteer: false,
+		antiCrawler: false,
+		supportBT: false,
+		supportPodcast: false,
+		supportScihub: false
+	},
+	radar: [{ source: ["apnews.com/"] }],
+	name: "News (from mobile client API)",
+	maintainers: ["dzx-dzx"],
+	handler
+};
+async function handler(ctx) {
+	const screen = (await rofetch("https://apnews.com/graphql/delivery/ap/v1", { query: {
+		operationName: "ContentPageQuery",
+		variables: { path: ctx.req.param("path") ? `/${ctx.req.param("path")}` : "/" },
+		extensions: { persistedQuery: {
+			version: 1,
+			sha256Hash: "3bc305abbf62e9e632403a74cc86dc1cba51156d2313f09b3779efec51fc3acb"
+		} }
+	} })).data.Screen;
+	const list = [...screen.main.filter((e) => e.__typename === "ColumnContainer").flatMap((_) => _.columns), ...screen.main.filter((e) => e.__typename !== "ColumnContainer")].filter((e) => e.__typename !== "GoogleDfPAdModule").flatMap((e) => {
+		switch (e.__typename) {
+			case "PageListModule": return e.items;
+			case "VideoPlaylistModule": return e.playlist;
+			default: return;
+		}
+	}).filter(Boolean).map((e) => {
+		if (e.__typename === "PagePromo") return {
+			title: e.title,
+			link: e.url,
+			pubDate: parseDate(e.publishDateStamp),
+			category: e.category,
+			description: e.description,
+			guid: e.id
+		};
+		if (e.__typename === "VideoPlaylistItem") return {
+			title: e.title,
+			link: e.url,
+			description: e.description,
+			guid: e.contentId
+		};
+	}).filter(Boolean).toSorted((a, b) => b.pubDate - a.pubDate).slice(0, ctx.req.query("limit") ? Number(ctx.req.query("limit")) : 20);
+	const items = ctx.req.query("fulltext") === "true" ? await pMap(list, (item) => fetchArticle(item), { concurrency: 10 }) : list;
+	return {
+		title: screen.category ?? screen.title,
+		item: items,
+		link: "https://apnews.com"
+	};
+}
+//#endregion
+export { route };
