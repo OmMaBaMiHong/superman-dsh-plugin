@@ -39,7 +39,23 @@ vendor/rsshub/  RSSHub 编译产物（dist-lib，import 即用，RSS/博主订�
 ```
 
 可选增强（不配置即隐藏，插件功能不受影响）：Chaos 中台治理榜单、
-平台发布能力（二进制分发，见 docs/publish-bin.md，路线图）。
+平台发布能力（SAU 执行器，见下）。
+
+## 平台发布（SAU 执行器，可选）
+
+发布到抖音/小红书/B站等平台的能力由 SAU 执行器承载（Flask + patchright 浏览器自动化，
+上游 social-auto-upload 分支）。独立版以 **PyInstaller 二进制**形态分发，目标机器零
+Python 依赖：
+
+```bash
+bash scripts/build-sau-binary.sh    # 一次性构建（需应用仓库的 SAU venv），产物 build/sau-dist/
+bash scripts/sau-executor.sh start  # 启动（调度器 keeper 也会自动拉起），:5409
+```
+
+- 数据目录 `vendor/sau-data/`（cookies/db/videoFile，gitignore），与上游服务互不影响；
+  迁移已登录账号 = 拷贝上游的 `cookies/` 与 `db/database.db`
+- 共享密钥 `~/.dsh/.env` 的 `SAU_TOKEN`，与插件进程同一把
+- 全新机器需先装一次浏览器驱动：`patchright install chromium`（用户级缓存，不随二进制分发）
 
 ## 开发
 

@@ -1,0 +1,49 @@
+--- a/conf.py
++++ b/conf.py
+@@ -1,6 +1,45 @@
++import os
++import sqlite3
++import sys
+ from pathlib import Path
+ 
+-BASE_DIR = Path(__file__).parent.resolve()
++
++def _default_base() -> Path:
++    # PyInstaller 打包后 __file__ 指向临时解包目录；冻结态回退到可执行文件同目录
++    if getattr(sys, "frozen", False):
++        return Path(sys.executable).parent
++    return Path(__file__).parent
++
++
++BASE_DIR = Path(os.environ.get("SAU_DATA_DIR") or _default_base()).resolve()
++
++# 数据目录脚手架：冻结态/全新 SAU_DATA_DIR 自动补齐工作子目录并初始化 sqlite
++# （表结构与上游 db/createTable.py 一致，CREATE TABLE IF NOT EXISTS 幂等）
++for _sub in (
++    "db", "cookies", "cookiesFile", "videoFile", "logs",
++    "cookies/douyin_uploader", "cookies/ks_uploader",
++    "cookies/tencent_uploader", "cookies/xiaohongshu_uploader",
++):
++    (BASE_DIR / _sub).mkdir(parents=True, exist_ok=True)
++_conn = sqlite3.connect(BASE_DIR / "db" / "database.db")
++_conn.executescript("""
++CREATE TABLE IF NOT EXISTS user_info (
++    id INTEGER PRIMARY KEY AUTOINCREMENT,
++    type INTEGER NOT NULL,
++    filePath TEXT NOT NULL,
++    userName TEXT NOT NULL,
++    status INTEGER DEFAULT 0
++);
++CREATE TABLE IF NOT EXISTS file_records (
++    id INTEGER PRIMARY KEY AUTOINCREMENT,
++    filename TEXT NOT NULL,
++    filesize REAL,
++    upload_time DATETIME DEFAULT CURRENT_TIMESTAMP,
++    file_path TEXT
++);
++""")
++_conn.commit()
++_conn.close()
+ XHS_SERVER = "http://127.0.0.1:11901"  # only used by xhs-related flows
+ # 可选的本地 Chrome 可执行文件路径；留空则使用 Playwright 自带的 Chromium。
+ # 例如 "C:/Program Files/Google/Chrome/Application/chrome.exe" 或 macOS 的 "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
