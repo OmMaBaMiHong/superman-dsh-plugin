@@ -1,5 +1,5 @@
---- a/src/plugin/host/index.ts
-+++ b/src/plugin/host/index.ts
+--- src/plugin/host/index.ts	2026-10-26 22:59:01
++++ /Users/wade/work-space/superman-dsh-plugin/src/plugin/host/index.ts	2026-10-26 23:53:26
 @@ -20,7 +20,6 @@
  import { loadMigrations, runMigrations, startHeartbeat } from './scheduler.js'
  import { registerTools } from './tools.js'
@@ -8,15 +8,7 @@
  import { registerSkills } from './skills.js'
  import { registerHostIdentityBridge, getHostIdentity } from './hostIdentity.js'
  import { registerRelayHostBridge, relayBridgeApi, getRelayHostBridgeState } from './relayHostBridge.js'
-@@ -134,13 +133,14 @@
-         log(`心跳调度器已启动（间隔 ${intervalMs}ms → plugin_heartbeats）`)
-       }
- 
--      // 调度器开关优先级（P2e-5）：cordis config 显式值 > DB（设置页热切换）> env 兜底。
-+      // 调度器开关优先级：cordis config 显式值 > DB（设置页热切换）> env 兜底。
-+      // 独立版默认开（无 Next.js worker 互斥）；SUPERMAN_SCHEDULER_ENABLED=false 显式关闭。
-       // projectRoot 传给 keeper（SAU 启动脚本在 scripts/ 下）。
-       const dbServices = await findServicesConfig(pool as never)
+@@ -144,7 +143,7 @@
        const schedulerEnabled =
          typeof config.schedulerEnabled === 'boolean'
            ? config.schedulerEnabled
@@ -25,7 +17,7 @@
        scheduler = startPluginScheduler(
          pool,
          { ...config, schedulerEnabled, projectRoot: PROJECT_ROOT },
-@@ -174,24 +174,9 @@
+@@ -178,24 +177,8 @@
        warn(`[superman] 存储 ${storageMode} 初始化失败：${message}；路由与工具继续可用（dev 鉴权），心跳/调度关闭`)
      })
  
@@ -33,8 +25,7 @@
 -  // 周期任务），由设置项 trendRadarRunMode/trendRadarRunTime 驱动：off=仅手动触发，
 -  // daily=每天到点自动跑一次（跑完自动补结构化同步）。手动「立即运行」与定时共用
 -  // 同一去重状态（service_config key=trendradar_run），一天至多一轮。
-+  // 独立版无 Python TrendRadar 外采（热点改由调度器 hotboard.sync tick 直采入库），
-+  // 应用版的 runTrendRadarScheduleTick 每日拉起逻辑整体移除。
++  // 独立版无 TrendRadar Python 外采（热点由调度器 hotboard.sync tick 直采入库）。
    let trendRadarTimer: ReturnType<typeof setInterval> | null = null
 -  let trendRadarTickBusy = false
 -  trendRadarTimer = setInterval(() => {

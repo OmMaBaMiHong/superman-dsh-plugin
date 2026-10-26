@@ -1,14 +1,15 @@
-@@ -2,7 +2,8 @@
+@@ -2,7 +2,9 @@
   * Superman DSH 插件 · 调度器（K2 批次 3：接管 Next.js worker 的定时职责）。
   *
   * 复用既有 handler 逻辑（不改语义）：
 - *   - trendradar.sync：每 30 分钟读 TrendRadar 当日 SQLite 全量 upsert（core/trendradar/sync）
-+ *   - hotboard.sync：每 30 分钟抓内置热榜渠道（知乎/微博/百度/头条/抖音），
-+ *     直接 upsert 进 trend_radar_items（src/hotboard，独立版取代 TrendRadar Python 外采）
++ *   - hotboard.sync：每 30 分钟按用户勾选的平台采集热榜（src/hotboard），
++ *     直接 upsert 进 trend_radar_items（独立版取代 TrendRadar Python 外采；
++ *     一个都没勾 = 不采集，面板同样不展示）
   *   - feed 抓取：每 60s 扫一轮到期订阅源，逐源 fetchAndIngestFeed（src/worker/index 导出，
   *     治理摄取在该 handler 内联执行；article filter 等后续 pg-boss 任务由 no-op boss 跳过，
   *     迁移期交由 Next.js worker 的队列侧继续消费）
-@@ -10,15 +11,11 @@
+@@ -10,15 +12,11 @@
   *   - pipeline.rewrite：每 15s 轮询 pipeline_jobs 里 queued 的 rewrite 任务，
   *     直接调 executeRewriteJob 执行（不经 pg-boss）
   *
@@ -26,18 +27,18 @@
  import { executeRewriteJob } from '@/core/pipelines/services/rewriteService'
  import { notify, notifyOncePerWindow } from '@/core/notify/service'
  import { getGovernanceStats } from '@/core/governance/repository'
-@@ -84,7 +81,9 @@
+@@ -84,7 +82,9 @@
  
  export function isSchedulerEnabled(config: PluginSchedulerConfig): boolean {
    if (typeof config.schedulerEnabled === 'boolean') return config.schedulerEnabled
 -  return process.env.SUPERMAN_SCHEDULER_ENABLED === 'true'
 +  if (process.env.SUPERMAN_SCHEDULER_ENABLED === 'false') return false
-+  // 独立版默认开：没有 Next.js worker 的互斥问题（应用内嵌版默认关，需显式开）。
++  // 独立版没有 Next.js worker 的双跑互斥，默认开启（应用内嵌版默认关，见模块头注释）
 +  return true
  }
  
  /**
-@@ -151,14 +150,27 @@
+@@ -151,14 +151,27 @@
      timers.push(timer)
    }
  
@@ -49,7 +50,7 @@
 -        logger.log(`trendradar.sync: user=${user.id} upserted=${result.upserted} platforms=${result.platforms}`)
 -      }
 +  // 独立版热点同步（订阅制）：只采集用户勾选的平台（user_source_prefs source='hot'，
-+  // 跨活跃用户取并集；一个都没勾 = 不采集，面板同样不展示）。未勾选时本轮直接跳过。
++  // 跨活跃用户取并集；一个都没勾 = 不采集，面板同样不展示）。
 +  every('hotboard.sync', config.trendradarIntervalMs ?? TRENDRADAR_INTERVAL, async () => {
 +    const { runHotboardSync } = await import('../../../hotboard/run.js')
 +    const { rows: prefRows } = await pool.query(
@@ -72,12 +73,3 @@
    })
  
    // 服务 keeper（P2e-5，SAU 专用）：探活 SAU 执行器，不可用自动拉起。
-@@ -299,7 +311,7 @@
-     }
-   })
- 
--  logger.log('调度器已启动：trendradar.sync(30m) + feed.fetch(60s) + pipeline.rewrite(状态变化触发，无轮询) + publishTracking.tick(30m) + commentIntel.tick(6h) + knowledge.backfill(30m) + productPlan.scan(12h)')
-+  logger.log('调度器已启动：hotboard.sync(30m) + feed.fetch(60s) + pipeline.rewrite(状态变化触发，无轮询) + publishTracking.tick(30m) + commentIntel.tick(6h) + knowledge.backfill(30m) + productPlan.scan(12h)')
-   return {
-     stop: () => {
-       for (const timer of timers) clearInterval(timer)
