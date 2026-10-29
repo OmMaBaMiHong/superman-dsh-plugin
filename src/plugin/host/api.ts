@@ -1951,6 +1951,13 @@ const ROUTES: RouteDef[] = [
     json(res, 200, { ok: true, data: result })
   }),
 
+  // 清空已读通知：采集失败这类噪声一键清掉
+  route('DELETE', '/notifications/read', async ({ res, session, db }) => {
+    const { pruneReadNotifications } = await import('@/core/notify/service');
+    const deleted = await pruneReadNotifications(db as never, session.userId);
+    json(res, 200, { ok: true, data: { deleted } });
+  }),
+
   // —— 剪贴板快速收藏 ——
   route('POST', '/clips', async ({ req, res, session, db }) => {
     const body = await readJsonBody(req);

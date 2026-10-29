@@ -155,8 +155,11 @@ export async function markAllNotificationsRead(db: DbClient, userId?: string): P
 /** 时间窗去重（如 pending_backlog 每 24h 最多一条）：窗内已有同 kind 记录（不论已读）则跳过。 */
 export async function hasNotificationInWindow(
   db: DbClient,
-  input: { userId?: string; kind: NotificationKind; windowSeconds: number },
+  input: { userId?: string; kind: NotificationKind; windowSeconds: number; title?: string },
 ): Promise<boolean> {
+  const params: unknown[] = [normalizeUserId(input.userId), input.kind, Math.max(1, Math.round(input.windowSeconds))];
+  const titleFilter = input.title ? 'and title = $4' : '';
+  if (input.title) params.push(input.title);
   const { rows } = await db.query<{ count: number }>(
     `
       select count(*)::int as count
@@ -164,8 +167,18 @@ export async function hasNotificationInWindow(
       where user_id = $1
         and kind = $2
         and created_at > now() - make_interval(secs => $3)
+        ${titleFilter}
     `,
-    [normalizeUserId(input.userId), input.kind, Math.max(1, Math.round(input.windowSeconds))],
+    params,
   );
   return (rows[0]?.count ?? 0) > 0;
+}
+
+/** 删除已读通知（清理刷屏用）；返回删除条数。 */
+export async function deleteReadNotifications(db: DbClient, userId?: string): Promise<number> {
+  const { rows } = await db.query<{ id: string }>(
+    `delete from notifications where user_id = $1 and read_at is not null returning id`,
+    [normalizeUserId(userId)],
+  );
+  return rows.length;
 }

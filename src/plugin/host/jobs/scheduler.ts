@@ -17,6 +17,9 @@ import type { PgBoss } from 'pg-boss'
 import { listUsers } from '@/core/auth/usersRepo'
 import { executeRewriteJob } from '@/core/pipelines/services/rewriteService'
 import { notify, notifyOncePerWindow } from '@/core/notify/service'
+
+/** 采集失败提醒的去重窗口：同一订阅源 6 小时内只报一次，避免刷屏（原来每个 tick 都写一条）。 */
+const FETCH_FAILED_WINDOW_SECONDS = 6 * 3600;
 import { getGovernanceStats } from '@/core/governance/repository'
 import { runPublishTrackingTick } from '@/core/publish-tracking/service'
 import { runCommentIntelTick } from '@/core/comment-intel/service'
@@ -109,13 +112,14 @@ export async function fetchDueFeedsOnce(
       inserted += result.inserted
       if (result.errorMessage) {
         logger?.warn(`[superman] feed.fetch: feed=${feed.id} ${result.errorMessage}`)
-        // P2a 事件：采集失败 → 消息中心（静默失败不阻断抓取轮）
-        await notify(pool as never, {
+        // P2a 事件：采集失败 → 消息中心（按源 6h 去重，避免每轮 tick 都刷一条）
+        await notifyOncePerWindow(pool as never, {
           userId: feed.userId ?? user.id,
           kind: 'fetch_failed',
           title: `订阅源「${feedTitleById.get(feed.id) ?? feed.id}」采集失败`,
           body: result.errorMessage.slice(0, 500),
-          link: '/reader',
+          link: '/discover?tab=rss',
+          windowSeconds: FETCH_FAILED_WINDOW_SECONDS,
         }).catch(() => {})
       }
     }

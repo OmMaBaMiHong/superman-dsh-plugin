@@ -4,6 +4,7 @@
  */
 import type { Pool, PoolClient } from 'pg';
 import {
+  deleteReadNotifications,
   hasNotificationInWindow,
   insertNotification,
   type NotificationKind,
@@ -42,7 +43,13 @@ export async function notifyOncePerWindow(
     userId: input.userId,
     kind: input.kind,
     windowSeconds: input.windowSeconds,
+    title: input.title,
   });
   if (exists) return null;
   return insertNotification(db, input);
+}
+
+/** 清空已读通知。 */
+export async function pruneReadNotifications(db: DbClient, userId?: string): Promise<number> {
+  return deleteReadNotifications(db, userId);
 }
