@@ -1,79 +1,180 @@
-# superman-dsh-plugin
+<div align="center">
 
-Superman 热点订阅与创作的 **DSH 独立插件**：只依赖 DSH 宿主，安装即可用——
-内置渠道热榜采集、RSS/博主订阅、看板与 agent 工具，数据落在本机内嵌库
-（PGlite，零配置），可选接入 Postgres。
+# Superman
 
-## 安装
+**跑在 DeepSeek Harness 里的内容工作台插件**
 
-把本仓库放进（或 link 进）DSH profile 的依赖即可：
+热点/订阅发现 → 治理审批 → AI 创作 → 发布 → 数据复盘，一条本地闭环
 
-```bash
-# DSH profile package.json
-"dependencies": {
-  "superman": "link:/path/to/superman-dsh-plugin"
-}
+[![DSH Plugin](https://img.shields.io/badge/DeepSeek%20Harness-Plugin-4D6BFE)](https://github.com/deepseek-ai)
+![TypeScript](https://img.shields.io/badge/TypeScript-5.x-3178C6)
+![PGlite](https://img.shields.io/badge/Storage-PGlite%20%2F%20Postgres-34A853)
+![License](https://img.shields.io/badge/License-MIT-2EA44F)
+
+</div>
+
+---
+
+## 这是什么
+
+Superman 是 **DSH（DeepSeek Harness）的独立插件**：装进 DSH 后，侧栏多出一个「工作台」面板，
+把「找选题 → 出成稿 → 发出去 → 看数据」这条内容流水线全部装进本地。
+
+- **零配置**：数据默认落在本机内嵌库（PGlite），不依赖外部服务；想换 Postgres 改一行连接串即可
+- **模型复用宿主**：默认直接调 DSH 自带的 DeepSeek（`ctx.llm`），不用另填 API Key
+- **本地优先**：收藏的图/视频可以直接落进你自己的 Obsidian vault，数据始终是文件
+
+## 功能一览
+
+### 订阅聚合：热点 + RSS + GitHub + 插件目录
+
+![热点新闻](docs/screenshots/hot-news.png)
+
+- 五个热榜渠道（微博 / 知乎 / 百度 / 头条 / 抖音），**勾选即采集**；今天没数据会自动补采一轮
+- 二级导航统一：`全部 N | 微博 50 | 知乎 30 …`，默认「全部」，滚动与高亮联动
+- 每个渠道失败互相隔离，不拖垮整块看板
+
+![RSS 订阅](docs/screenshots/rss-reader.png)
+
+- 三栏阅读器（订阅源 / 作品列表 / 正文），支持 RSS、B 站、抖音等
+- 订阅源自动分类：**AI / 财经 / 科技 / 开发 / 新闻 / 生活 / 其他**（关键词标签库，可自己扩）
+- 一键「立即抓取」、失败源会标记原因
+
+### 收藏夹 / 随记：截图、链接、视频都能收
+
+![收藏瀑布流](docs/screenshots/favorites.png)
+
+- 智能收藏：粘贴分享文案、`⌘V` 截图、拖入视频 → 自动识别归类为 **图片 / 视频 / 文案 / 链接**
+- 瀑布流 3–4 列，视频自动抽首帧当封面，图片显示首图 + 张数角标
+- 支持编辑标题/备注、删除；随记支持时间线 / 日历视图
+
+![智能收藏](docs/screenshots/smart-clip.png)
+
+**落盘到本地目录（Obsidian vault）**：
+
+```text
+<你的目录>/
+├── 那条收藏-20261029-193012.md     # frontmatter + 正文，![[attachments/…]] 内嵌
+└── attachments/2026-10/
+    ├── 1793199904489_abc.png       # 图片原文件
+    └── 视频.poster.jpg / 视频.mp4   # 视频首帧封面 + 原视频
 ```
 
-重启 DSH 后插件自动挂载：`/s/api/*` 业务 API、`/s/app/*` H5 前端、
-`superman_*` agent 工具、调度器（热点定时同步）。
+### 创作流水线：策划 → 成稿 → 草稿箱
 
-## 内置渠道（写死、可改）
+![选题池](docs/screenshots/studio-topics.png)
 
-知乎热榜 · 微博热搜 · 百度热搜 · 头条热榜 · 抖音热点
+![生成稿件](docs/screenshots/studio-generate.png)
 
-- 渠道定义集中在 [`src/hotboard/channels.ts`](src/hotboard/channels.ts)：
-  每个渠道 = endpoint + 解析函数，增删改只动这一个文件
-- 追加渠道不改代码：`HOTBOARD_EXTRA_CHANNELS_JSON` 环境变量传 JSON 数组
-- 单渠道失败自动隔离，不拖累其它渠道
-- 采集结果写入 `trend_radar_items` 表，看板 / agent 工具 / 转选题链路零改动复用
+- 从选题池一键生成：**公众号深度文 / 小红书种草 / 小说化改写**，可多平台并行
+- **两段式生成**：先出策划案（切入角度 / 标题候选 / 分节大纲），再按大纲写正文；
+  策划段失败会自动降级为单段，不阻塞出稿
+- **平台化产物**：公众号带摘要 + 备选标题，小红书带话题标签 + 封面文案，小说化带章节名
+- **原创度红线**：与原文 bigram 相似度 > 0.5 自动带降重指令重写一次，仍超标落 `needs_review` 等人工终审
+- 草稿箱可对照原文、看相似度、采纳、导出 Markdown
+
+### 发布与复盘
+
+- **公众号**：API 直接送进草稿箱（配好 AppID/AppSecret 即可）
+- **抖音 / 小红书**：视频走 SAU 执行器发布
+- **纯文案**：一键复制平台格式化文案（标题+正文+话题）+ 打开创作后台 + 回填链接登记
+- 登记后进「表现」：按链接追踪播放/点赞/评论 7 天曲线，爆款触发提醒
+
+### 消息中心
+
+![消息中心](docs/screenshots/notifications.png)
+
+- 事件型通知：任务完成、采集失败、待批积压、产品机会、系统通知
+- 分类筛选（全部/未读/任务/采集/系统）、全部已读、清空已读
+- 采集失败按「订阅源 × 6 小时」去重，不会刷屏
+
+### 我的：平台账号 + 数据
+
+![我的](docs/screenshots/profile.png)
+
+- 平台账号（中转站 / 数据中台 / 公众号 / 抖音 / 小红书 / 视频号 / 快手 / B站 / 微博）
+- 我的数据：收藏、创作、发布统计 + 作品/收藏/订阅/数据子标签
+- 右上角齿轮收起小设置菜单：收藏保存目录 / 服务与同步 / 更多设置 / 退出登录
 
 ## 架构
 
+```text
+src/hotboard/      热榜采集（纯 TS，零外部进程）：channels.ts 增删渠道只动一个文件
+src/plugin/        DSH 插件本体
+  host/            /s/api/* 业务 API、调度器、agent 工具（superman_*）、H5 静态伺服
+  public/app/      构建产物（DSH 面板加载的前端）
+kernel/core/       自包含业务内核：治理/订阅/阅读器/收藏/流水线/发布追踪/通知/产品计划
+kernel/server/     依赖闭包（存储、AI 适配、平台账号、vault 导出）
+vendor/rsshub/     RSSHub 编译产物（import 即用）
 ```
-src/hotboard/   内置渠道采集器（纯 TS，零外部进程——替代旧 TrendRadar Python 外采链）
-src/plugin/     插件本体（host：/s/api + 调度 + agent 工具；client：DSH 侧栏面板）
-kernel/core/    自包含业务内核（治理/订阅/发布追踪/热点/知识，对外零依赖）
-kernel/server|lib|features   依赖闭包（提取脚本搬入）
-vendor/rsshub/  RSSHub 编译产物（dist-lib，import 即用，RSS/博主订阅）
+
+数据流：
+
+```text
+采集(热榜/RSS) ─┐
+                ├─→ articles(待批) ──审批──→ 选题池 ──生成──→ drafts ──采纳──→ 发布 ──→ published_posts(追踪)
+收藏(图片/文本) ─┘        │                    │                 │
+                       通知中心            产品计划              Obsidian vault
 ```
 
-可选增强（不配置即隐藏，插件功能不受影响）：Chaos 中台治理榜单、
-平台发布能力（SAU 执行器，见下）。
+- **存储**：默认 PGlite（`~/.dsh/superman/pgdata`），可切 Postgres（`SUPERMAN_DATABASE_URL`）
+- **模型**：DSH 宿主模型桥（`dsh://llm`）优先；也支持应用内自填 OpenAI 兼容 endpoint
+- **调度器**：默认只跑事件驱动任务（保存即采集、生成即执行），周期任务可按需开启
 
-## 平台发布（SAU 执行器，可选）
-
-发布到抖音/小红书/B站等平台的能力由 SAU 执行器承载（Flask + patchright 浏览器自动化，
-上游 social-auto-upload 分支）。它是**插件拉起的本地辅助进程**，以 PyInstaller 打成本机
-二进制，本机无需 Python 环境：
+## 快速开始
 
 ```bash
-bash scripts/build-sau-binary.sh    # 一次性构建（需应用仓库的 SAU venv），产物 build/sau-dist/
-bash scripts/sau-executor.sh start  # 启动（调度器 keeper 也会自动拉起），:5409
+# 1. 装进 DSH profile（link 本地仓库即可）
+#    profile/package.json
+"dependencies": {
+  "superman": "link:/path/to/superman-dsh-plugin"
+}
+
+# 2. 重启 DSH —— 插件自动挂载
+#    /s/api/*  业务 API
+#    /s/app/*  H5 前端（侧栏「工作台」面板）
+#    superman_* agent 工具（可让 AI 帮你审稿/生成）
 ```
 
-- 数据目录 `vendor/sau-data/`（cookies/db/videoFile，gitignore），与上游服务互不影响；
-  迁移已登录账号 = 拷贝上游的 `cookies/` 与 `db/database.db`
-- 共享密钥 `~/.dsh/.env` 的 `SAU_TOKEN`，与插件进程同一把
-- 本机浏览器驱动缺失时补一次：`patchright install chromium`（用户级缓存，不随二进制走）
+首次使用建议：
+
+1. 「订阅 → 热点新闻」里勾选要看的平台（默认全选）
+2. 「我的 → 设置菜单 → 收藏保存目录」填一个本机绝对路径（Obsidian vault 子目录最顺手）
+3. 「我的 → 平台账号」按需授权公众号 / 抖音 / 小红书
 
 ## 开发
 
 ```bash
-bash scripts/extract-from-superman.sh [应用仓库路径]   # 从 superman 应用提取内核（自动迭代闭包）
 pnpm install
-pnpm type-check     # 应为零错误
-pnpm build          # esbuild 单文件打包（scripts/build.mjs）+ 资产拷贝
-pnpm hotboard:sync  # 零配置：无连接串时自动走 PGlite 并补迁移
+pnpm type-check     # TypeScript 全量检查
+pnpm build          # 构建 dist/plugin（host + H5 产物 + 迁移）
+
+pnpm hotboard:sync  # 单独跑一轮热榜采集（调试渠道用）
 ```
 
-独立版与上游 `src/plugin` 的差异（hotboard 调度 tick、调度默认开、去 Python
-TrendRadar 定时器）以 patch 形式放在 `scripts/patches/`，提取脚本拷贝后自动重放；
-上游更新导致补丁冲突时需人工合并重新生成。
+> H5 前端源码在上游仓库 `FeedFuse` 的 `src/h5`，构建产物同步到本仓库 `src/plugin/public/app`。
 
-数据落在本机 `~/.dsh/superman/pgdata`（PGlite 单实例：插件运行中时 `pnpm hotboard:sync`
-会等锁超时，先退出 DSH 或改用连接串）。
+## 设计取舍
+
+- **不做热补丁**：host 改动必须重新构建、重启 DSH 才生效；只在 H5 侧做静态资源热更新
+- **不做双跑**：插件调度器与旧 Next.js worker 互斥，避免同一批任务被消费两次
+- **原创度优先**：洗稿默认跑相似度校验，宁可在草稿箱多一次人工审查，不产出洗稿风险内容
+- **文件优先**：收藏的媒体与笔记可以直接是本地文件，Obsidian / iCloud / Git 都能接管
+
+## Roadmap
+
+- [ ] 视频线：文案 → 口播稿/分镜 → TTS 配音 → 合成 → SAU 发布抖音/小红书
+- [ ] 创作自检闭环：长度/结构/标签清单校验，不合格自动修订一轮
+- [ ] 发布后复盘：3/7 天数据回判，反哺选题池
+- [ ] 平台技能库可编辑：把三个平台的 prompt 从代码搬到可编辑配置
+- [ ] 订阅源健康管理：失败源暂停、换地址建议
+
+## 致谢
+
+- 灵感与部分流程设计参考 [Easel](https://github.com/ZJU-REAL/Easel)（社媒运营助手：技能化 prompt、两段式创作、发布复盘）
+- RSS/博主订阅基于 [RSSHub](https://github.com/DIYgod/RSSHub)
+- 热榜数据模型沿用 TrendRadar 的表结构，看板/agent 工具链路零改动复用
 
 ## License
 
-见 LICENSE（内核与插件跟随主项目协议；内嵌 RSSHub 为 AGPL-3.0，见 vendor/rsshub）。
+[MIT](LICENSE)

@@ -64,5 +64,16 @@
     "esbuild": "^0.25.0",
     "tsx": "^4.21.0",
     "typescript": "^5.9.3"
-  }
+  },
+  "description": "DSH 插件：内容工作台（热点/订阅聚合、收藏夹、AI 创作流水线、发布与数据复盘）",
+  "license": "MIT",
+  "keywords": [
+    "dsh",
+    "dsh-plugin",
+    "deepseek",
+    "content",
+    "rss",
+    "trending",
+    "obsidian"
+  ]
 }

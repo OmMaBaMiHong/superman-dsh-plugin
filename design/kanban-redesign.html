@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>创作看板改版样图</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body {
+    font-family: -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif;
+    background:#f4f5f7; color:#1f2328; padding:24px 32px 64px;
+  }
+  h1 { font-size:20px; margin-bottom:4px; }
+  .sub { font-size:13px; color:#6b7280; margin-bottom:20px; }
+  .seg { display:inline-flex; background:#e5e7eb; border-radius:10px; padding:3px; margin-bottom:24px; }
+  .seg button {
+    border:0; background:transparent; padding:7px 18px; font-size:13px;
+    border-radius:8px; cursor:pointer; color:#6b7280; font-weight:500;
+  }
+  .seg button.on { background:#fff; color:#111; font-weight:600; box-shadow:0 1px 2px rgba(0,0,0,.08); }
+  .board { display:flex; gap:16px; align-items:flex-start; }
+  .col { flex:1; min-width:220px; min-height:420px; }
+
+  /* ===== 现状：列大卡片套小卡片 ===== */
+  .old-col {
+    background:#fff; border:1px solid #e5e7eb; border-radius:14px;
+    padding:14px 12px 10px; box-shadow:0 1px 3px rgba(0,0,0,.05);
+    min-height:420px;
+  }
+  .old-col.hl { border:1.5px solid #14b8a6; }
+  .old-colhead { display:flex; align-items:center; justify-content:space-between; margin-bottom:10px; }
+  .old-colhead .name { font-size:13px; font-weight:600; display:flex; align-items:center; gap:6px; }
+  .old-colhead .cnt { font-size:12px; color:#9ca3af; }
+  .old-card {
+    background:#fff; border:1px solid #e5e7eb; border-radius:12px;
+    padding:12px; margin-bottom:10px;
+  }
+  .old-col .dash { text-align:center; color:#d1d5db; padding:40px 0; font-size:18px; }
+
+  /* ===== 方案：列扁平化，卡片直接在画布上 ===== */
+  .new-board { display:flex; gap:0; align-items:flex-start; }
+  .new-col { flex:1; min-width:220px; min-height:420px; padding:0 14px 8px; }
+  .new-col + .new-col { border-left:1px solid #eceef1; }
+  .new-col.hl { background:linear-gradient(180deg, rgba(20,184,166,.05), rgba(20,184,166,0) 220px); border-radius:12px; }
+  .new-colhead {
+    display:flex; align-items:center; gap:7px; padding:2px 2px 10px;
+    font-size:13px; font-weight:600; color:#374151;
+  }
+  .dot { width:8px; height:8px; border-radius:50%; }
+  .dot.gray { background:#9ca3af; } .dot.teal { background:#14b8a6; }
+  .new-colhead .cnt {
+    font-size:11px; font-weight:500; color:#6b7280;
+    background:#eceef1; border-radius:99px; padding:1px 7px;
+  }
+  .new-colhead .hint { margin-left:auto; font-size:11px; font-weight:400; color:#9ca3af; }
+  .card {
+    background:#fff; border:1px solid #e6e8ec; border-radius:12px;
+    padding:11px 12px; margin-bottom:8px; cursor:grab;
+    box-shadow:0 1px 2px rgba(16,24,40,.04);
+    transition:box-shadow .15s, border-color .15s;
+  }
+  .card:hover { border-color:#cfd4da; box-shadow:0 3px 8px rgba(16,24,40,.08); }
+  .card.top { border-top:2px solid #14b8a6; }
+  .card-row { display:flex; align-items:center; gap:6px; margin-bottom:6px; }
+  .badge {
+    font-size:10px; padding:1.5px 7px; border-radius:6px; font-weight:500;
+    background:#f3f4f6; color:#6b7280; border:1px solid #e5e7eb;
+  }
+  .badge.img { background:#ecfdf5; color:#059669; border-color:#a7f3d0; }
+  .score { margin-left:auto; font-size:11px; color:#14b8a6; font-weight:600; }
+  .card-title { font-size:13.5px; font-weight:600; color:#111; margin-bottom:5px; line-height:1.45; }
+  .card-desc {
+    font-size:12px; color:#6b7280; line-height:1.55; margin-bottom:8px;
+    display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden;
+  }
+  .card-meta { font-size:11px; color:#9ca3af; display:flex; gap:6px; align-items:center; margin-bottom:8px; flex-wrap:wrap; }
+  .card-meta .sep::before { content:"·"; }
+  .fail {
+    font-size:11px; color:#dc2626; background:#fef2f2; border-radius:6px;
+    padding:4px 8px; margin-bottom:8px; display:flex; align-items:center; gap:5px;
+  }
+  .fail .retry { color:#dc2626; font-weight:500; cursor:pointer; text-decoration:underline; text-underline-offset:2px; }
+  .card-actions { display:flex; gap:8px; }
+  .card-actions button {
+    flex:1; font-size:12px; padding:5.5px 0; border-radius:8px; cursor:pointer;
+    border:1px solid #e6e8ec; background:#fff; color:#374151; font-weight:500;
+    transition:background .12s;
+  }
+  .card-actions button.pri { background:#f0fdfa; border-color:#99f6e4; color:#0d9488; font-weight:600; }
+  .card-actions button:hover { background:#f9fafb; }
+  .card-actions button.pri:hover { background:#ccfbf1; }
+  .empty-hint { text-align:center; color:#c3c8cf; padding:48px 0; font-size:12px; }
+
+  /* 注解 */
+  .note { margin:28px auto 0; max-width:1180px; }
+  .note h3 { font-size:14px; margin-bottom:8px; }
+  .note li { font-size:12.5px; color:#4b5563; line-height:2; }
+  .variant { display:none; }
+  .variant.on { display:block; }
+</style>
+</head>
+<body>
+  <h1>创作看板改版样图</h1>
+  <div class="sub">问题：现在的看板是「列大卡片套小卡片」，两层边框两层圆角，视觉上很重。方案参考 Linear / Trello 的做法——列不是卡片，只是画布上的一个区域；只有条目本身是卡片。</div>
+  <div class="seg">
+    <button class="on" onclick="sw('new', this)">优化方案</button>
+    <button onclick="sw('old', this)">现状对照</button>
+  </div>
+
+  <div class="variant on" id="v-new">
+    <div class="board new-board">
+      <div class="new-col">
+        <div class="new-colhead"><span class="dot gray"></span>审批 <span class="cnt">0</span></div>
+        <div class="empty-hint">审批台准奏后进入选题池</div>
+      </div>
+      <div class="new-col hl">
+        <div class="new-colhead"><span class="dot teal"></span>选题池 <span class="cnt">2</span><span class="hint">点「生成稿件」开始改写</span></div>
+        <div class="card top">
+          <div class="card-row"><span class="badge img">图文</span><span class="score">80 分</span></div>
+          <div class="card-title">1 张图片收藏</div>
+          <div class="card-desc">从外部收藏的 1 张图片素材，暂无标题、来源与正文说明，信息量有限，仅作素材留存。</div>
+          <div class="card-meta">10/28 11:42</div>
+          <div class="fail">⚠ 上次生成失败，<span class="retry">可重试</span></div>
+          <div class="card-actions"><button>详情</button><button class="pri">✎ 生成稿件</button></div>
+        </div>
+        <div class="card">
+          <div class="card-row"><span class="badge">文案</span><span class="score" style="color:#9ca3af">— 分</span></div>
+          <div class="card-title">中国足协与皇马俱乐部严正交涉</div>
+          <div class="card-meta">微博热搜 · 热榜第 1 名 · 热度 1798075</div>
+          <div class="card-meta">热点雷达 · 10/28 01:04</div>
+          <div class="fail">⚠ 上次生成失败，<span class="retry">可重试</span></div>
+          <div class="card-actions"><button>详情</button><button class="pri">✎ 生成稿件</button></div>
+        </div>
+      </div>
+      <div class="new-col">
+        <div class="new-colhead"><span class="dot teal"></span>创作中 <span class="cnt">0</span></div>
+        <div class="empty-hint">AI 正在改写生成稿件</div>
+      </div>
+      <div class="new-col">
+        <div class="new-colhead"><span class="dot gray"></span>草稿箱</div>
+        <div class="empty-hint">成稿待采纳</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="variant" id="v-old">
+    <div class="board">
+      <div class="col old-col">
+        <div class="old-colhead"><span class="name">● 审批</span><span class="cnt">0</span></div>
+        <div class="old-colhead"><span class="name" style="font-weight:400;color:#9ca3af">审批台准奏后进入选题池</span></div>
+        <div class="dash">—</div>
+      </div>
+      <div class="col old-col hl">
+        <div class="old-colhead"><span class="name">● 选题池</span><span class="cnt">2</span></div>
+        <div class="old-colhead"><span class="name" style="font-weight:400;color:#9ca3af">点「生成稿件」开始改写</span></div>
+        <div class="old-card">
+          <div class="card-row"><span class="badge img">图文</span><span class="score">80 分</span></div>
+          <div class="card-title">1 张图片收藏</div>
+          <div class="card-desc">从外部收藏的 1 张图片素材，暂无标题、来源与正文说明，信息量有限，仅作素材留存。</div>
+          <div class="card-meta">10/28 11:42</div>
+          <div class="fail">⚠ 上次生成失败，可重试</div>
+          <div class="card-actions"><button>详情</button><button class="pri">✎ 生成稿件</button></div>
+        </div>
+        <div class="old-card">
+          <div class="card-row"><span class="badge">文案</span><span class="score" style="color:#9ca3af">— 分</span></div>
+          <div class="card-title">中国足协与皇马俱乐部严正交涉</div>
+          <div class="card-meta">微博热搜 · 热榜第 1 名 · 热度 1798075</div>
+          <div class="card-actions"><button>详情</button><button class="pri">✎ 生成稿件</button></div>
+        </div>
+      </div>
+      <div class="col old-col">
+        <div class="old-colhead"><span class="name">● 创作中</span><span class="cnt">0</span></div>
+        <div class="old-colhead"><span class="name" style="font-weight:400;color:#9ca3af">AI 正在改写生成稿件</span></div>
+        <div class="dash">—</div>
+      </div>
+      <div class="col old-col">
+        <div class="old-colhead"><span class="name">● 草稿箱</span></div>
+        <div class="old-colhead"><span class="name" style="font-weight:400;color:#9ca3af">成稿待采纳</span></div>
+        <div class="dash">—</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="note">
+    <h3>改动点</h3>
+    <ul>
+      <li><b>列不再是卡片</b>：去掉列容器的白底/边框/圆角/内边距，列头扁平化（状态点 + 名称 + 数量胶囊），列与列用 1px 细分隔线——层级从「卡片套卡片」变「画布上直接摆卡片」</li>
+      <li><b>选中列的强调变轻</b>：从青色粗边框改为列顶部一层极淡的青色渐变，不再和小卡片的边框抢</li>
+      <li><b>小卡片减重</b>：时间/来源合并成一行元信息，失败提示改成卡片内浅红底小条，按钮降为次级样式，主按钮「生成稿件」浅青底</li>
+      <li><b>空列不再是大卡片套一条横线</b>：改为居中的浅灰提示字</li>
+    </ul>
+  </div>
+
+<script>
+  function sw(id, btn) {
+    document.querySelectorAll('.variant').forEach(v => v.classList.remove('on'));
+    document.getElementById(id).classList.add('on');
+    document.querySelectorAll('.seg button').forEach(b => b.classList.remove('on'));
+    btn.classList.add('on');
+  }
+</script>
+</body>
+</html>
