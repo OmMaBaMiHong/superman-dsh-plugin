@@ -225,6 +225,8 @@ function route(method: RouteDef['method'], pattern: string, handler: RouteHandle
  */
 /** 今日热榜空数据时的自动补采（同一进程只跑一轮，避免每次读都打一遍平台接口）。 */
 let hotboardAutoSyncInFlight = false;
+/** 每进程每天只自动补采一轮：目录扩到几十个平台后，当天已有部分平台数据也要补齐全覆盖。 */
+let hotboardAutoSyncDateKey: string | null = null;
 
 const MEDIA_TOKEN_ROUTES = new Set<string>([
   '/reader/items/:id/video',
@@ -820,24 +822,45 @@ const ROUTES: RouteDef[] = [
       userId: session.userId,
       date: dateParam || undefined,
     })
-    // 今天还没采集（调度器关着时很常见）：读接口顺手补一轮，用户不用先去勾选面板保存触发
+    // 今天采集不完整（空数据或平台覆盖不足）：读接口顺手补一轮，用户不用先去勾选面板保存触发。
+    // 每进程每天最多触发一次，避免几十个平台每次读接口都被打一遍；剩余失败交给 30 分钟调度轮。
     let syncing = false
-    if (!dateParam && items.length === 0 && !hotboardAutoSyncInFlight) {
+    const todayKey = todayLocalDateString()
+    let expectedPlatforms = 0
+    try {
+      const { BUILTIN_CHANNELS } = await import('../../hotboard/channels.js')
+      expectedPlatforms = BUILTIN_CHANNELS.length
+    } catch {
+      // 目录不可用时退回旧行为（仅今日 0 条才补采）
+    }
+    const { rows: hotPrefRows } = await db.query(
+      `SELECT DISTINCT pref_key FROM user_source_prefs WHERE user_id = $1 AND source_key = 'hot'`,
+      [session.userId],
+    )
+    const hotPrefKeys = hotPrefRows.map((row) => String(row.pref_key)).filter((key) => key !== '')
+    // 显式「全不选」落哨兵键 __none__：不补采，也不把用户选择当成「没选过 = 全选」
+    const explicitlyNone = hotPrefKeys.length > 0 && hotPrefKeys.every((key) => key === '__none__')
+    const selectedPlatforms = hotPrefKeys.filter((key) => key !== '__none__')
+    const coveredPlatforms = new Set(items.map((item) => item.platform)).size
+    const needAutoSync =
+      !dateParam &&
+      !explicitlyNone &&
+      !hotboardAutoSyncInFlight &&
+      hotboardAutoSyncDateKey !== todayKey &&
+      (items.length === 0 || (expectedPlatforms > 0 && coveredPlatforms < expectedPlatforms))
+    if (needAutoSync) {
       hotboardAutoSyncInFlight = true
       syncing = true
       void (async () => {
         try {
-          const { rows: prefRows } = await db.query(
-            `SELECT DISTINCT pref_key FROM user_source_prefs WHERE user_id = $1 AND source_key = 'hot'`,
-            [session.userId],
-          )
-          const platforms = prefRows.map((row) => String(row.pref_key)).filter(Boolean)
+          // 无论采集成功失败，今天都不再重复自动触发（平台偶发失败交给调度轮补）
+          hotboardAutoSyncDateKey = todayKey
           const { runHotboardSync } = await import('../../hotboard/run.js')
           // 没勾过任何平台 = 默认全平台（订阅制放开前的老行为），避免新用户看到空看板
           await runHotboardSync({
             db,
             userId: session.userId,
-            ...(platforms.length > 0 ? { platforms } : {}),
+            ...(selectedPlatforms.length > 0 ? { platforms: selectedPlatforms } : {}),
           })
         } catch {
           // 采集失败：保持空数据，前端提示稍后重试
@@ -1661,8 +1684,25 @@ const ROUTES: RouteDef[] = [
       `SELECT key FROM subscribe_catalog WHERE source = $1 AND enabled = 1 LIMIT 1`,
       [source],
     )
+    // hot 目录以代码为事实源：每次请求按 BUILTIN_CHANNELS 顺序 upsert 进本地表，
+    // 老库不跑迁移也能列出全量平台；新增/改名/排序随代码即时生效，不依赖中台推送。
+    if (source === 'hot') {
+      try {
+        const { BUILTIN_CHANNELS } = await import('../../hotboard/channels.js')
+        for (let index = 0; index < BUILTIN_CHANNELS.length; index += 1) {
+          const channel = BUILTIN_CHANNELS[index]
+          await db.query(
+            `INSERT INTO subscribe_catalog (source, key, label, sort, enabled) VALUES ('hot', $1, $2, $3, 1)
+             ON CONFLICT (source, key) DO UPDATE SET label = EXCLUDED.label, sort = EXCLUDED.sort, enabled = 1`,
+            [channel.id, channel.name, (index + 1) * 10],
+          )
+        }
+      } catch {
+        // 目录模块不可用：回落本地表已有目录（老库仍显示迁移种子，不阻断面板）
+      }
+    }
     // 中台能力回源：github/dsh 目录首次访问（或 refresh=1）拉取并缓存进本地表；
-    // 真相在本地库，中台不可用时回落缓存。hot 为本地采集能力（0018 种子）。
+    // 真相在本地库，中台不可用时回落缓存。
     if (refresh || existing.length === 0) {
       try {
         if (source === 'github') {
@@ -1738,14 +1778,17 @@ const ROUTES: RouteDef[] = [
       json(res, 400, { ok: false, error: { code: 'bad_request', message: 'source 与 keys 必填' } })
       return
     }
+    // 显式「全不选」存哨兵键：空表语义是「从没选过 = 默认全选」，不落哨兵就无法表达「一个都不采」。
+    const NONE_KEY = '__none__'
+    const prefKeys = keys.length > 0 ? keys : [NONE_KEY]
     await db.query('DELETE FROM user_source_prefs WHERE user_id = $1 AND source_key = $2', [session.userId, source])
-    for (const key of keys) {
+    for (const key of prefKeys) {
       await db.query(
         'INSERT INTO user_source_prefs (user_id, source_key, pref_key) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING',
         [session.userId, source, key],
       )
     }
-    // 保存即生效：热点平台勾选后立即按勾选采集（不等 30 分钟调度轮）
+    // 保存即生效：热点平台勾选后立即按勾选采集（不等 30 分钟调度轮）；显式全不选不触发采集
     if (source === 'hot' && keys.length > 0) {
       void (async () => {
         try {

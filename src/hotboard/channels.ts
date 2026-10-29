@@ -1,14 +1,17 @@
 /**
- * 内置热榜渠道 —— 纯 TS 直采公开榜单 JSON 接口，零外部进程依赖。
+ * 内置热榜渠道 —— 纯 TS 直采公开榜单，零外部进程依赖。
  *
- * 这就是开源版的"写死的几个渠道"：每个渠道一个 endpoint + 一个解析函数，
- * 用户改这个文件（或后续做成配置）即可增删渠道。字段结构对齐
- * core/trendradar 的 TrendRadarUpsertItem（platform/title/url/rank/hotValue），
- * 采集结果直接喂 upsertTrendRadarItems 入库，看板/agent 工具零改动复用。
+ * 两条形态：
+ *  1) endpoint + parse：直采公开 JSON 接口（内置五渠道，最稳）；
+ *  2) read：移植自 newsnow（MIT）的各平台解析器（readers/ 目录，几十个平台）。
+ * 字段结构对齐 core/trendradar 的 TrendRadarUpsertItem
+ * （platform/title/url/rank/hotValue），采集结果直接喂 upsertTrendRadarItems 入库，
+ * 看板 / agent 工具零改动复用。
  *
- * 渠道遴选原则（吸收 TrendRadar/FactReach 经验）：只收无需鉴权、返回稳定
- * JSON 的公开榜单；带 UA 伪装；单渠道失败不影响其它渠道。
+ * 渠道遴选原则（吸收 TrendRadar/FactReach 经验）：只收无需鉴权、公开可访问的榜单；
+ * 带 UA 伪装；单渠道失败不影响其它渠道。
  */
+import { READER_CHANNELS, type HotboardReader } from './readers/index.js';
 
 export interface HotboardRawItem {
   title: string;
@@ -23,10 +26,14 @@ export interface HotboardChannel {
   /** 展示名，入库 platform_name */
   name: string;
   homeUrl: string;
-  endpoint: string;
+  /** 目录分类（reader 渠道带；直采渠道缺省视为国内热榜） */
+  category?: string;
+  endpoint?: string;
   headers?: Record<string, string>;
   /** 从 JSON 响应解析条目；抛错视为该渠道本轮失败，不拖累其它渠道。 */
-  parse: (json: unknown) => HotboardRawItem[];
+  parse?: (json: unknown) => HotboardRawItem[];
+  /** 自带抓取逻辑的渠道（newsnow reader）；返回名次序条目。 */
+  read?: () => Promise<HotboardRawItem[]>;
 }
 
 function asRecord(value: unknown): Record<string, unknown> {
@@ -166,8 +173,39 @@ const douyin: HotboardChannel = {
   },
 };
 
-/** 内置渠道清单 —— 顺序即采集顺序；增删渠道改这里即可。 */
-export const BUILTIN_CHANNELS: readonly HotboardChannel[] = [zhihu, weibo, baidu, toutiao, douyin];
+/** newsnow reader → collector 统一渠道形状：名次由数组顺序确定。 */
+function readerToChannel(reader: HotboardReader): HotboardChannel {
+  return {
+    id: reader.id,
+    name: reader.name,
+    homeUrl: reader.homeUrl,
+    category: reader.category,
+    async read() {
+      const items = await reader.read();
+      return items.map((item, index) => ({
+        title: item.title,
+        url: item.url ?? null,
+        rank: index + 1,
+        hotValue: item.heatLabel ?? (item.heat != null ? String(item.heat) : null),
+      }));
+    },
+  };
+}
+
+/** 五渠道直采（最稳）+ newsnow reader 平台（默认全开，enabled=false 的不进目录）。 */
+const readerChannels: HotboardChannel[] = READER_CHANNELS.filter(
+  (reader) => reader.enabled !== false,
+).map(readerToChannel);
+
+/** 内置渠道清单 —— 顺序即目录/采集顺序；增删渠道改这里或 readers/ 注册表。 */
+export const BUILTIN_CHANNELS: readonly HotboardChannel[] = [
+  zhihu,
+  weibo,
+  baidu,
+  toutiao,
+  douyin,
+  ...readerChannels,
+];
 
 /** 允许通过环境变量追加渠道配置文件的路径（JSON 数组，同 HotboardChannel 形状，parse 内置不支持）。 */
 export function resolveChannels(env: NodeJS.ProcessEnv = process.env): HotboardChannel[] {
@@ -175,27 +213,27 @@ export function resolveChannels(env: NodeJS.ProcessEnv = process.env): HotboardC
   if (!extra) return [...BUILTIN_CHANNELS];
   try {
     const parsed = JSON.parse(extra) as Array<Record<string, unknown>>;
-    return [
-      ...BUILTIN_CHANNELS,
-      ...parsed.map((raw) => ({
-        id: str(raw.id),
-        name: str(raw.name) || str(raw.id),
-        homeUrl: str(raw.homeUrl),
-        endpoint: str(raw.endpoint),
-        headers: (raw.headers as Record<string, string> | undefined) ?? undefined,
-        parse(json: unknown) {
-          return asArray(asRecord(json).items).map((item, index) => {
-            const entry = asRecord(item);
-            return {
-              title: str(entry.title),
-              url: str(entry.url) || null,
-              rank: num(entry.rank) ?? index + 1,
-              hotValue: str(entry.hotValue) || null,
-            };
-          });
-        },
-      })),
-    ].filter((channel) => channel.id && channel.endpoint);
+    const extraChannels: HotboardChannel[] = parsed.map((raw) => ({
+      id: str(raw.id),
+      name: str(raw.name) || str(raw.id),
+      homeUrl: str(raw.homeUrl),
+      endpoint: str(raw.endpoint),
+      headers: (raw.headers as Record<string, string> | undefined) ?? undefined,
+      parse(json: unknown) {
+        return asArray(asRecord(json).items).map((item, index) => {
+          const entry = asRecord(item);
+          return {
+            title: str(entry.title),
+            url: str(entry.url) || null,
+            rank: num(entry.rank) ?? index + 1,
+            hotValue: str(entry.hotValue) || null,
+          };
+        });
+      },
+    }));
+    return [...BUILTIN_CHANNELS, ...extraChannels].filter(
+      (channel) => channel.id && (channel.endpoint || channel.read),
+    );
   } catch {
     return [...BUILTIN_CHANNELS];
   }

@@ -34,6 +34,18 @@ const MIN_TITLE_LENGTH = 2;
 const MAX_ITEMS_PER_CHANNEL = 50;
 
 async function fetchChannel(channel: HotboardChannel): Promise<HotboardRawItem[]> {
+  const items = await readChannel(channel);
+  return items
+    .filter((item) => item.title.length >= MIN_TITLE_LENGTH)
+    .slice(0, MAX_ITEMS_PER_CHANNEL);
+}
+
+/** 两种渠道形态统一入口：reader 自带抓取逻辑；直采渠道走 endpoint+parse。 */
+async function readChannel(channel: HotboardChannel): Promise<HotboardRawItem[]> {
+  if (channel.read) return channel.read();
+  if (!channel.endpoint || !channel.parse) {
+    throw new Error(`渠道 ${channel.id} 未配置 endpoint/read`);
+  }
   const response = await fetch(channel.endpoint, {
     headers: {
       accept: 'application/json, text/plain, */*',
@@ -45,8 +57,7 @@ async function fetchChannel(channel: HotboardChannel): Promise<HotboardRawItem[]
     throw new Error(`HTTP ${response.status}`);
   }
   const json = (await response.json()) as unknown;
-  const items = channel.parse(json).filter((item) => item.title.length >= MIN_TITLE_LENGTH);
-  return items.slice(0, MAX_ITEMS_PER_CHANNEL);
+  return channel.parse(json);
 }
 
 export async function collectHotboard(

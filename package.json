@@ -28,6 +28,7 @@
   "scripts": {
     "extract": "bash scripts/extract-from-superman.sh",
     "build": "node scripts/build.mjs",
+    "hotboard:probe": "tsx scripts/probe-hotboard.ts",
     "type-check": "tsc --noEmit -p tsconfig.json",
     "hotboard:sync": "tsx src/hotboard/run.ts"
   },
@@ -40,6 +41,7 @@
     "@whisper-cpp-node/darwin-arm64": "^0.2.12",
     "better-sqlite3": "^13.0.3",
     "busboy": "^1.6.0",
+    "cheerio": "^1.2.0",
     "got": "^14.6.6",
     "ipaddr.js": "^2.3.0",
     "jsdom": "^28.1.0",
